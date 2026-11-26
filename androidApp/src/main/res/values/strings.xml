@@ -128,8 +128,6 @@
     <string name="feature_recording">Recording</string>
     <string name="feature_snapshots">Snapshots</string>
     <string name="feature_motion">Motion detection</string>
-    <string name="feature_recording_locked">Disabled in Frigate\'s configuration</string>
     <string name="feature_motion_locked">Needed while object detection is on</string>
-    <string name="controls_admin_only">Only an administrator can change these</string>
     <string name="controls_temporary">Changes last until Frigate restarts</string>
 </resources>

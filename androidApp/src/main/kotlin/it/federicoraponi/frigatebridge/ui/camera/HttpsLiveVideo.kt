@@ -110,6 +110,8 @@ fun HttpsLiveVideo(
                         }
 
                         override fun onRenderedFirstFrame() {
+                            // It happens again whenever the picture moves to another surface.
+                            if (rendered) return
                             rendered = true
                             val elapsed = (SystemClock.elapsedRealtime() - started).toInt()
                             Log.d(TAG, "https: first frame after $elapsed ms")

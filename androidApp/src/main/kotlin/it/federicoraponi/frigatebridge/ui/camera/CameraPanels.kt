@@ -83,22 +83,19 @@ fun FeaturePanel(
     controls: CameraControls,
     onChange: (CameraFeature, Boolean) -> Unit,
 ) {
+    val shown = features.filter { it.first in controls.available }
     ListGroup(title = stringResource(R.string.controls_title)) {
-        features.forEachIndexed { index, (feature, label) ->
+        shown.forEachIndexed { index, (feature, label) ->
             val on = feature in controls.enabled
             val locked = feature !in controls.switchable
-            val canToggle = controls.isAllowed && !controls.isApplying && !locked
-            val explanation =
-                when {
-                    !locked -> null
-                    feature == CameraFeature.Recording -> R.string.feature_recording_locked
-                    else -> R.string.feature_motion_locked
-                }
+            val canToggle = !controls.isApplying && !locked
+            // Only motion detection can be locked: it is needed while objects are detected.
+            val explanation = R.string.feature_motion_locked.takeIf { locked }
             SegmentedListItem(
                 checked = on,
                 onCheckedChange = { onChange(feature, it) },
                 enabled = canToggle,
-                shapes = ListItemDefaults.segmentedShapes(index = index, count = features.size),
+                shapes = ListItemDefaults.segmentedShapes(index = index, count = shown.size),
                 colors =
                     ListItemDefaults.segmentedColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -113,9 +110,8 @@ fun FeaturePanel(
             ) { Text(stringResource(label), style = MaterialTheme.typography.titleSmall) }
         }
     }
-    val note = if (controls.isAllowed) R.string.controls_temporary else R.string.controls_admin_only
     Text(
-        stringResource(note),
+        stringResource(R.string.controls_temporary),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = Spacing.lg),

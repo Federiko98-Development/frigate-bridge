@@ -30,7 +30,7 @@ fun LandscapeFullscreen() {
         bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         bars?.hide(WindowInsetsCompat.Type.systemBars())
         onDispose {
-            // Back upright, even if the sensor still says sideways: the pages are made for portrait.
+            // The pages are made for portrait; only full screen turns the phone sideways.
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             bars?.show(WindowInsetsCompat.Type.systemBars())
         }

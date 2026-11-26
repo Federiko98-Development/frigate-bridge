@@ -169,7 +169,10 @@ fun CameraRoute(
                 }
                 FullscreenButton { fullscreen = true }
             }
-            if (state.streams.isNotEmpty()) FeaturePanel(state.controls, viewModel::setFeature)
+            // Only administrators may change camera settings, and they do not belong with the recordings.
+            if (state.mode == VideoMode.Live && state.controls.isAllowed && state.streams.isNotEmpty()) {
+                FeaturePanel(state.controls, viewModel::setFeature)
+            }
         }
     }
 }
@@ -260,13 +263,16 @@ private fun FullscreenCamera(
                 modifier = Modifier.align(Alignment.TopEnd),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                if (state.mode == VideoMode.Live) MuteButton(muted, onMutedChange, hasAudio)
+                if (state.mode == VideoMode.Live && hasAudio) MuteButton(muted, onMutedChange)
                 FilledTonalIconButton(onClick = onExit, shapes = IconButtonDefaults.shapes()) {
                     Icon(
                         painterResource(R.drawable.ic_fullscreen_exit),
                         contentDescription = stringResource(R.string.video_exit_fullscreen),
                     )
                 }
+            }
+            if (state.mode == VideoMode.Live && state.streams.size > 1) {
+                StreamChoice(state, viewModel::selectStream, Modifier.align(Alignment.TopStart))
             }
             val ptz = state.ptz
             if (state.mode == VideoMode.Live && ptz != null) {
@@ -371,15 +377,9 @@ private fun LiveControls(
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (state.streams.size > 1) {
-            ConnectedChoice(
-                labels = state.streams.map { it.label },
-                selected = state.streams.indexOfFirst { it.name == state.selectedStream },
-                onSelect = { onSelectStream(state.streams[it].name) },
-            )
-        }
+        if (state.streams.size > 1) StreamChoice(state, onSelectStream)
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-            MuteButton(muted, onMutedChange, measures.hasAudio != false)
+            if (measures.hasAudio != false) MuteButton(muted, onMutedChange)
             FullscreenButton(onFullscreen)
         }
         if (state.live == LiveState.Playing) {
@@ -402,14 +402,27 @@ private fun LiveControls(
     }
 }
 
+/** The camera's streams, e.g. high and low quality. */
+@Composable
+private fun StreamChoice(
+    state: CameraState,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ConnectedChoice(
+        labels = state.streams.map { it.label },
+        selected = state.streams.indexOfFirst { it.name == state.selectedStream },
+        onSelect = { onSelect(state.streams[it].name) },
+        modifier = modifier,
+    )
+}
+
 @Composable
 private fun MuteButton(
     muted: Boolean,
     onMutedChange: (Boolean) -> Unit,
-    enabled: Boolean,
 ) {
     FilledTonalIconToggleButton(
-        enabled = enabled,
         checked = muted,
         onCheckedChange = onMutedChange,
         shapes = IconButtonDefaults.toggleableShapes(),

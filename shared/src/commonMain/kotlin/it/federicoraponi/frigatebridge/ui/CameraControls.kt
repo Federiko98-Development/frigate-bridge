@@ -6,7 +6,9 @@ import it.federicoraponi.frigatebridge.camera.CameraFeature
 /** The switches of a camera. */
 data class CameraControls(
     val enabled: Set<CameraFeature> = emptySet(),
-    /** The functions that can be switched from the app. */
+    /** The functions this camera offers: the others are not shown. */
+    val available: Set<CameraFeature> = emptySet(),
+    /** Those that can be switched right now. */
     val switchable: Set<CameraFeature> = emptySet(),
     /** Only administrators may change settings. */
     val isAllowed: Boolean = false,
@@ -42,14 +44,9 @@ internal fun Camera.controls(isAllowed: Boolean): CameraControls {
             if (isSavingSnapshots) add(CameraFeature.Snapshots)
             if (isDetectingMotion) add(CameraFeature.Motion)
         }
-    val switchable =
-        CameraFeature.entries.filterTo(mutableSetOf()) {
-            when (it) {
-                CameraFeature.Recording -> canRecord
-                // Detection needs motion detection: Frigate refuses to turn it off while detecting.
-                CameraFeature.Motion -> !isDetecting
-                else -> true
-            }
-        }
-    return CameraControls(enabled, switchable, isAllowed)
+    // Recording cannot be offered at all when the configuration file disables it.
+    val available = CameraFeature.entries.filterTo(mutableSetOf()) { it != CameraFeature.Recording || canRecord }
+    // Detection needs motion detection: Frigate refuses to turn it off while detecting.
+    val switchable = available.filterTo(mutableSetOf()) { it != CameraFeature.Motion || !isDetecting }
+    return CameraControls(enabled, available, switchable, isAllowed)
 }

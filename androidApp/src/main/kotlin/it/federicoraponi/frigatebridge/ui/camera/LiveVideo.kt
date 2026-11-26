@@ -72,7 +72,8 @@ fun LiveVideo(
                     override fun onFirstFrameRendered() {
                         val elapsed = (SystemClock.elapsedRealtime() - started).toInt()
                         main.post {
-                            if (active) {
+                            // Only the first one: the surface may be recreated later.
+                            if (active && measures.firstFrameMillis == null) {
                                 measures = measures.copy(firstFrameMillis = elapsed)
                                 playing()
                             }

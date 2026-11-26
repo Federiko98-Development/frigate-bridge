@@ -127,8 +127,6 @@
     <string name="feature_recording">Registrazione</string>
     <string name="feature_snapshots">Istantanee</string>
     <string name="feature_motion">Rilevamento movimento</string>
-    <string name="feature_recording_locked">Disattivata nella configurazione di Frigate</string>
     <string name="feature_motion_locked">Necessario finché il rilevamento oggetti è attivo</string>
-    <string name="controls_admin_only">Solo un amministratore può modificarle</string>
     <string name="controls_temporary">Le modifiche durano fino al riavvio di Frigate</string>
 </resources>

@@ -44,6 +44,8 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Inside a server a bottom bar (`MainTabBar`) switches tabs, with a plain fade (never scale a screen); each tab screen places it in
   its own `Scaffold`, so it moves with the page when something opens on top. Back from a tab returns to cameras.
 - Screens that read a server refresh by dragging down (`RefreshableContent`); there is no refresh button.
+- Controls depend on the camera: hide what it cannot do (no audio, no recording in the configuration, no PTZ
+  feature, not an administrator) instead of disabling it. The app is portrait except for full screen video.
 - Compact sizes: standard top app bars, default or small buttons and FAB, titles no larger than `titleLarge`.
   Medium and large variants looked oversized on a real phone (384dp wide).
 - Every `NavHost` sets all transitions, including `predictivePopEnterTransition` and
