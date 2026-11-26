@@ -39,6 +39,9 @@ import it.federicoraponi.frigatebridge.ui.cameras.CamerasRoute
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
 import it.federicoraponi.frigatebridge.ui.events.EventRoute
 import it.federicoraponi.frigatebridge.ui.events.EventsRoute
+import it.federicoraponi.frigatebridge.ui.exports.ExportRoute
+import it.federicoraponi.frigatebridge.ui.exports.ExportsRoute
+import it.federicoraponi.frigatebridge.ui.server.ServerStatusRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerFormRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerListRoute
 import it.federicoraponi.frigatebridge.ui.settings.SettingsRoute
@@ -74,6 +77,20 @@ private data class CameraView(
 private data class EventView(
     val serverId: String,
     val reviewId: String,
+)
+
+@Serializable
+private data object ServerStatusPage
+
+@Serializable
+private data class ExportList(
+    val savedOnly: Boolean,
+)
+
+@Serializable
+private data class ExportView(
+    val serverId: String,
+    val exportId: String,
 )
 
 @Serializable
@@ -187,6 +204,7 @@ private fun AppNavHost(
                 onOpen = { moment ->
                     navController.navigate(EventView(moment.serverId, moment.id)) { launchSingleTop = true }
                 },
+                onOpenSaved = { navController.open(ExportList(savedOnly = true)) },
                 bottomBar = { tabBar(MainTab.Events) },
             )
         }
@@ -194,6 +212,9 @@ private fun AppNavHost(
             SettingsRoute(
                 onManageServers = { navController.showServers() },
                 onAppLockChange = onAppLockChange,
+                onOpenStatus = { navController.open(ServerStatusPage) },
+                onOpenExports = { navController.open(ExportList(savedOnly = false)) },
+                onOpenSaved = { navController.open(ExportList(savedOnly = true)) },
                 bottomBar = { tabBar(MainTab.Settings) },
             )
         }
@@ -213,6 +234,24 @@ private fun AppNavHost(
                 onClose = { navController.popBackStack<CameraView>(inclusive = true) },
             )
         }
+        composable<ServerStatusPage> {
+            ServerStatusRoute(onClose = { navController.popBackStack<ServerStatusPage>(inclusive = true) })
+        }
+        composable<ExportList> { entry ->
+            ExportsRoute(
+                savedOnly = entry.toRoute<ExportList>().savedOnly,
+                onClose = { navController.popBackStack<ExportList>(inclusive = true) },
+                onOpen = { navController.open(ExportView(it.serverId, it.id)) },
+            )
+        }
+        composable<ExportView> { entry ->
+            val route = entry.toRoute<ExportView>()
+            ExportRoute(
+                serverId = route.serverId,
+                exportId = route.exportId,
+                onClose = { navController.popBackStack<ExportView>(inclusive = true) },
+            )
+        }
         composable<EventView> { entry ->
             val route = entry.toRoute<EventView>()
             EventRoute(
@@ -222,6 +261,7 @@ private fun AppNavHost(
                 onOpenTimeline = { camera, startTime ->
                     navController.openCamera(camera, recording = true, startTime = startTime)
                 },
+                onOpenKept = { navController.open(ExportList(savedOnly = true)) },
             )
         }
         composable<ServerForm> { entry ->
@@ -243,6 +283,10 @@ private fun AppNavHost(
 private fun NavHostController.openLinkedEvent(target: EventTarget) {
     if (!popBackStack<Cameras>(inclusive = false)) navigate(Cameras)
     navigate(EventView(target.serverId, target.reviewId))
+}
+
+private fun NavHostController.open(route: Any) {
+    navigate(route) { launchSingleTop = true }
 }
 
 private fun NavHostController.openCamera(

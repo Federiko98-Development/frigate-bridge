@@ -1,25 +1,25 @@
 package it.federicoraponi.frigatebridge.ui.events
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -40,9 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -56,10 +54,12 @@ import it.federicoraponi.frigatebridge.ui.EventArgs
 import it.federicoraponi.frigatebridge.ui.EventState
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.ExportState
+import it.federicoraponi.frigatebridge.ui.Keeping
 import it.federicoraponi.frigatebridge.ui.PlaybackState
 import it.federicoraponi.frigatebridge.ui.camera.BufferingOverlay
 import it.federicoraponi.frigatebridge.ui.camera.Failure
 import it.federicoraponi.frigatebridge.ui.camera.FullscreenButton
+import it.federicoraponi.frigatebridge.ui.camera.FullscreenPlayer
 import it.federicoraponi.frigatebridge.ui.camera.LandscapeFullscreen
 import it.federicoraponi.frigatebridge.ui.camera.PlayButton
 import it.federicoraponi.frigatebridge.ui.camera.RecordingPicture
@@ -70,9 +70,11 @@ import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
 import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
 import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
 import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
+import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.recordings.ExportSection
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
 import it.federicoraponi.frigatebridge.ui.recordings.dayLabel
@@ -92,6 +94,7 @@ fun EventRoute(
     reviewId: String,
     onClose: () -> Unit,
     onOpenTimeline: (CameraRef, startTime: Long) -> Unit,
+    onOpenKept: () -> Unit,
     viewModel: EventViewModel = koinViewModel { parametersOf(EventArgs(serverId, reviewId)) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -139,7 +142,7 @@ fun EventRoute(
     if (fullscreen) {
         BackHandler { fullscreen = false }
         LandscapeFullscreen()
-        FullscreenEvent(player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
+        FullscreenPlayer(player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
     } else {
         EventScreen(
             state = state,
@@ -148,6 +151,8 @@ fun EventRoute(
             onFullscreen = { fullscreen = true },
             onOpenTimeline = { onOpenTimeline(it.camera, it.start - LEAD_SECONDS) },
             onExport = viewModel::export,
+            onKeep = viewModel::keep,
+            onOpenKept = onOpenKept,
             onExportDone = viewModel::clearExport,
             messages = captures.messages,
             onPhoto = takePhoto,
@@ -166,6 +171,8 @@ private fun EventScreen(
     onExport: () -> Unit,
     onExportDone: () -> Unit,
     video: @Composable BoxScope.() -> Unit,
+    onKeep: (title: String) -> Unit = {},
+    onOpenKept: () -> Unit = {},
     messages: SnackbarHostState = remember { SnackbarHostState() },
     onPhoto: (() -> Unit)? = null,
 ) {
@@ -214,6 +221,13 @@ private fun EventScreen(
                     onClick = { onOpenTimeline(item) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                state.keeping?.let { keeping ->
+                    val seen = item.labels.map { labelName(it) }.joinToString()
+                    val moment = "${dayLabel(dayOf(item.start))} ${clockTime(item.start)}"
+                    // The name the kept video gets, also in Frigate's web interface.
+                    val title = listOf(seen, state.cameraName, moment).filter { it.isNotEmpty() }.joinToString(" · ")
+                    KeepSection(keeping, onKeep = { onKeep(title) }, onOpenKept = onOpenKept)
+                }
                 ExportSection(state.export, onChoose = onExport, onDone = onExportDone)
                 if (state.export == ExportState.None) {
                     Text(
@@ -250,32 +264,40 @@ private fun EventVideo(
     }
 }
 
+/** The button that keeps a moment on the server, then how it went. */
 @Composable
-private fun FullscreenEvent(
-    player: Player?,
-    messages: SnackbarHostState,
-    onPhoto: (() -> Unit)?,
-    onExit: () -> Unit,
-    video: @Composable () -> Unit,
+private fun KeepSection(
+    keeping: Keeping,
+    onKeep: () -> Unit,
+    onOpenKept: () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        video()
-        Box(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.lg)) {
-            Row(
-                modifier = Modifier.align(Alignment.TopEnd),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                onPhoto?.let { PhotoButton(it) }
-                FilledTonalIconButton(onClick = onExit, shapes = IconButtonDefaults.shapes()) {
-                    Icon(
-                        painterResource(R.drawable.ic_fullscreen_exit),
-                        contentDescription = stringResource(R.string.video_exit_fullscreen),
-                    )
-                }
-            }
-            SnackbarHost(messages, Modifier.align(Alignment.Center))
-            PlayButton(player, Modifier.align(Alignment.BottomCenter))
+    when (keeping) {
+        Keeping.NotKept -> KeepButton(R.string.keep_event, onKeep)
+        Keeping.Working -> {
+            Text(stringResource(R.string.keep_working), style = MaterialTheme.typography.bodyMedium)
+            LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
+        Keeping.Kept -> KeepButton(R.string.keep_open, onOpenKept)
+        is Keeping.Failed -> {
+            val problem = keeping.failure.problem
+            val text = if (problem != null) problemText(problem) else stringResource(R.string.keep_failed)
+            NoticeCard(
+                message = listOfNotNull(text, keeping.failure.detail).joinToString("\n"),
+                actionLabel = stringResource(R.string.retry),
+                onAction = onKeep,
+            )
+        }
+    }
+}
+
+@Composable
+private fun KeepButton(
+    label: Int,
+    onClick: () -> Unit,
+) {
+    FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes()) {
+        Icon(Icons.Filled.Star, contentDescription = null)
+        Text(stringResource(label), modifier = Modifier.padding(start = Spacing.sm))
     }
 }
 

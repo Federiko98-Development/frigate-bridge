@@ -1,0 +1,308 @@
+package it.federicoraponi.frigatebridge.ui.exports
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
+import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.server.RecordingClip
+import it.federicoraponi.frigatebridge.ui.ExportArgs
+import it.federicoraponi.frigatebridge.ui.ExportViewModel
+import it.federicoraponi.frigatebridge.ui.ExportViewState
+import it.federicoraponi.frigatebridge.ui.SeekRequest
+import it.federicoraponi.frigatebridge.ui.camera.BufferingOverlay
+import it.federicoraponi.frigatebridge.ui.camera.Failure
+import it.federicoraponi.frigatebridge.ui.camera.FullscreenButton
+import it.federicoraponi.frigatebridge.ui.camera.FullscreenPlayer
+import it.federicoraponi.frigatebridge.ui.camera.LandscapeFullscreen
+import it.federicoraponi.frigatebridge.ui.camera.RecordingPicture
+import it.federicoraponi.frigatebridge.ui.camera.RecordingTransport
+import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
+import it.federicoraponi.frigatebridge.ui.camera.ZoomableVideo
+import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
+import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
+import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
+import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
+import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
+import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
+import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.recordings.downloadAndShare
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
+
+/** One video kept on the server. */
+@Composable
+fun ExportRoute(
+    serverId: String,
+    exportId: String,
+    onClose: () -> Unit,
+    viewModel: ExportViewModel = koinViewModel { parametersOf(ExportArgs(serverId, exportId)) },
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.isGone) {
+        if (state.isGone) onClose()
+    }
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    val player =
+        state.file?.let { file ->
+            val clip = RecordingClip(file.url, file.headers, file.certificateSha256, 0, 0)
+            rememberRecordingPlayer(
+                clip = clip,
+                seek = SeekRequest(0, 0),
+                speed = 1f,
+                onPosition = {},
+                onEnded = {},
+                onError = viewModel::playerFailed,
+            )
+        }
+    val captures = rememberCaptures()
+    val name = state.item?.title.orEmpty()
+    val takePhoto =
+        player?.let { current ->
+            { captures.takePhoto(name, (state.item?.date ?: 0) + current.currentPosition / 1_000) }
+        }
+    // The video moves between the page and full screen without being rebuilt, so it keeps playing.
+    val video =
+        remember {
+            movableContentOf { shown: ExportViewState, current: Player?, retry: () -> Unit ->
+                CompositionLocalProvider(LocalFrameCapture provides captures.frames) {
+                    ExportVideo(shown, current, retry)
+                }
+            }
+        }
+    val picture: @Composable () -> Unit = { video(state, player, viewModel::retry) }
+    if (fullscreen) {
+        BackHandler { fullscreen = false }
+        LandscapeFullscreen()
+        FullscreenPlayer(player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
+        return
+    }
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<String?>(null) }
+    Scaffold(
+        snackbarHost = { SnackbarHost(captures.messages) },
+        topBar = {
+            TopAppBar(
+                title = { ScreenTitle(stringResource(R.string.export_page_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            VideoFrame { picture() }
+            RecordingTransport(player, onSkip = { seconds ->
+                player?.seekTo((player.currentPosition + seconds * 1_000L).coerceAtLeast(0))
+            })
+            takePhoto?.let { PhotoButton(it) }
+            FullscreenButton { fullscreen = true }
+            if (name.isNotEmpty()) {
+                Text(
+                    name.replace('_', ' '),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            state.file?.let { file ->
+                if (busy) {
+                    Text(stringResource(R.string.export_downloading), style = MaterialTheme.typography.bodyMedium)
+                    LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    PrimaryButton(
+                        text = stringResource(R.string.export_save),
+                        onClick = {
+                            val item = state.item ?: return@PrimaryButton
+                            busy = true
+                            scope.launch {
+                                captures.saveClip(file, item.camera.cameraName, item.date)
+                                busy = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            busy = true
+                            failure = null
+                            scope.launch {
+                                try {
+                                    context.downloadAndShare(file)
+                                } catch (cancellation: CancellationException) {
+                                    throw cancellation
+                                } catch (error: Exception) {
+                                    failure = error.message ?: error.javaClass.simpleName
+                                }
+                                busy = false
+                            }
+                        },
+                        shapes = ButtonDefaults.shapes(),
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = null)
+                        Text(stringResource(R.string.export_share), modifier = Modifier.padding(start = Spacing.sm))
+                    }
+                }
+            }
+            failure?.let { NoticeCard(stringResource(R.string.export_failed) + "\n" + it) }
+            val item = state.item
+            if (item != null && !item.inProgress) {
+                TextButton(
+                    onClick = { confirming = true },
+                    enabled = !state.isDeleting,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    shapes = ButtonDefaults.shapes(),
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Text(stringResource(R.string.export_delete), modifier = Modifier.padding(start = Spacing.sm))
+                }
+            }
+            if (state.isDeleting) ContainedLoadingIndicator()
+            // A failure to play is told over the video; this one is about deleting.
+            if (state.file != null) {
+                state.failure?.let { failed ->
+                    val problem = failed.problem
+                    val text = if (problem != null) problemText(problem) else stringResource(R.string.control_failed)
+                    NoticeCard(message = listOfNotNull(text, failed.detail).joinToString("\n"))
+                }
+            }
+        }
+    }
+    if (confirming) {
+        DeleteSheet(
+            isSaved = state.item?.savedReviewId != null,
+            onDismiss = { confirming = false },
+            onDelete = {
+                confirming = false
+                viewModel.delete()
+            },
+        )
+    }
+}
+
+@Composable
+private fun ExportVideo(
+    state: ExportViewState,
+    player: Player?,
+    onRetry: () -> Unit,
+) {
+    ZoomableVideo(resetKey = null, enabled = player != null) { picture ->
+        val failure = state.failure
+        when {
+            player != null -> {
+                RecordingPicture(player, picture)
+                BufferingOverlay(player)
+            }
+            failure != null -> Failure(failure, R.string.video_failed, onRetry)
+            else -> ContainedLoadingIndicator()
+        }
+    }
+}
+
+/** Asks before a file is removed from the server, which cannot be undone. */
+@Composable
+private fun DeleteSheet(
+    isSaved: Boolean,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState =
+            rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+        ) {
+            Text(stringResource(R.string.export_delete_title), style = MaterialTheme.typography.titleLargeEmphasized)
+            Text(
+                stringResource(if (isSaved) R.string.export_delete_saved else R.string.export_delete_message),
+                textAlign = TextAlign.Center,
+            )
+            Button(
+                onClick = onDelete,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                shapes = ButtonDefaults.shapes(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.export_delete)) }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    }
+}

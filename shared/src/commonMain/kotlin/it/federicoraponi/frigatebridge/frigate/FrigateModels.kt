@@ -100,6 +100,8 @@ data class ReviewDto(
 
 @Serializable
 data class ReviewDataDto(
+    /** The identifiers of the tracked objects that make up the moment. */
+    val detections: List<String> = emptyList(),
     val objects: List<String> = emptyList(),
     val audio: List<String> = emptyList(),
     val zones: List<String> = emptyList(),
@@ -133,7 +135,11 @@ data class StartedExportDto(
 @Serializable
 data class ExportDto(
     val id: String,
+    val camera: String = "",
     val name: String = "",
+    /** When the export was asked for, in seconds since the epoch. */
+    val date: Double = 0.0,
+    @SerialName("thumb_path") val thumbPath: String = "",
     @SerialName("video_path") val videoPath: String = "",
     @SerialName("in_progress") val inProgress: Boolean = false,
 )
@@ -197,12 +203,52 @@ data class UserProfileDto(
 @Serializable
 data class StatsDto(
     val service: ServiceStatsDto = ServiceStatsDto(),
+    val cameras: Map<String, CameraStatsDto> = emptyMap(),
+    val detectors: Map<String, DetectorStatsDto> = emptyMap(),
+    /** By process; `frigate.full_system` is the whole machine. */
+    @SerialName("cpu_usages") val cpuUsages: Map<String, ProcessUsageDto> = emptyMap(),
 )
 
 @Serializable
 data class ServiceStatsDto(
     val uptime: Long = 0,
     val version: String = "",
+    @SerialName("latest_version") val latestVersion: String = "",
+    /** By path on the server, in mebibytes. */
+    val storage: Map<String, DiskStatsDto> = emptyMap(),
+)
+
+@Serializable
+data class DiskStatsDto(
+    val total: Double = 0.0,
+    val used: Double = 0.0,
+    val free: Double = 0.0,
+)
+
+@Serializable
+data class CameraStatsDto(
+    @SerialName("camera_fps") val cameraFps: Double = 0.0,
+    @SerialName("skipped_fps") val skippedFps: Double = 0.0,
+)
+
+@Serializable
+data class DetectorStatsDto(
+    /** In milliseconds. */
+    @SerialName("inference_speed") val inferenceSpeed: Double = 0.0,
+)
+
+/** Percentages, which Frigate sends as text. */
+@Serializable
+data class ProcessUsageDto(
+    val cpu: String? = null,
+    val mem: String? = null,
+)
+
+/** The space a camera's recordings take, in mebibytes. */
+@Serializable
+data class CameraStorageDto(
+    val usage: Double = 0.0,
+    @SerialName("usage_percent") val usagePercent: Double? = null,
 )
 
 /** Frigate's configuration profiles (e.g. "away"). */

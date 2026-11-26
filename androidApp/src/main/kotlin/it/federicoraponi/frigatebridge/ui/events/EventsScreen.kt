@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -80,6 +81,7 @@ import org.koin.androidx.compose.koinViewModel
 fun EventsRoute(
     onShowServers: () -> Unit,
     onOpen: (ReviewItem) -> Unit,
+    onOpenSaved: () -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: EventsViewModel = koinViewModel(),
 ) {
@@ -91,6 +93,7 @@ fun EventsRoute(
         state = state,
         viewModel = viewModel,
         onShowServers = onShowServers,
+        onOpenSaved = onOpenSaved,
         onOpen = {
             viewModel.markViewed(it)
             onOpen(it)
@@ -105,6 +108,7 @@ private fun EventsScreen(
     viewModel: EventsViewModel,
     onShowServers: () -> Unit,
     onOpen: (ReviewItem) -> Unit,
+    onOpenSaved: () -> Unit,
     bottomBar: @Composable () -> Unit,
 ) {
     var picking by rememberSaveable { mutableStateOf(false) }
@@ -126,6 +130,11 @@ private fun EventsScreen(
             TopAppBar(
                 title = { ServerSwitcher(state.server, state.servers, viewModel::switchTo, onShowServers) },
                 actions = {
+                    if (state.canManage) {
+                        IconButton(onClick = onOpenSaved, shapes = IconButtonDefaults.shapes()) {
+                            Icon(Icons.Filled.Star, contentDescription = stringResource(R.string.saved_title))
+                        }
+                    }
                     IconButton(onClick = { picking = true }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.events_choose_moment))
                     }

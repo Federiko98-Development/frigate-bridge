@@ -56,6 +56,9 @@ data class SettingsActions(
     val setSavePreviewData: (Boolean) -> Unit = {},
     val manageServers: () -> Unit = {},
     val setAppLock: (Boolean) -> Unit = {},
+    val openStatus: () -> Unit = {},
+    val openExports: () -> Unit = {},
+    val openSaved: () -> Unit = {},
 )
 
 /** The app's settings. [onBack] is set when the screen was opened on top of another one, not as a tab. */
@@ -63,6 +66,9 @@ data class SettingsActions(
 fun SettingsRoute(
     onManageServers: () -> Unit,
     onAppLockChange: (Boolean) -> Unit,
+    onOpenStatus: () -> Unit = {},
+    onOpenExports: () -> Unit = {},
+    onOpenSaved: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     viewModel: SettingsViewModel = koinViewModel(),
@@ -79,7 +85,11 @@ fun SettingsRoute(
                 setSavePreviewData = viewModel::setSavePreviewData,
                 manageServers = onManageServers,
                 setAppLock = onAppLockChange,
+                openStatus = onOpenStatus,
+                openExports = onOpenExports,
+                openSaved = onOpenSaved,
             ),
+        managedServer = state.managedServer,
         // Looked up again every time the screen is drawn: the phone's screen lock may have just been set up.
         canLock = LocalContext.current.canAuthenticateUser(),
         onBack = onBack,
@@ -93,6 +103,8 @@ fun SettingsScreen(
     actions: SettingsActions,
     modifier: Modifier = Modifier,
     canLock: Boolean = true,
+    /** The active server's name, when its administrator's pages are offered. */
+    managedServer: String? = null,
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
 ) {
@@ -128,6 +140,7 @@ fun SettingsScreen(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Language()
             Cameras(settings, actions)
             Security(settings.appLock, canLock, actions.setAppLock)
+            managedServer?.let { ThisServer(it, actions) }
             Servers(actions.manageServers)
             About()
         }
@@ -266,6 +279,36 @@ private fun Servers(onManage: () -> Unit) {
             onClick = onManage,
             index = 0,
             count = 1,
+        )
+    }
+}
+
+@Composable
+private fun ThisServer(
+    name: String,
+    actions: SettingsActions,
+) {
+    ListGroup(title = name) {
+        LinkItem(
+            title = stringResource(R.string.status_title),
+            description = stringResource(R.string.status_hint),
+            onClick = actions.openStatus,
+            index = 0,
+            count = 3,
+        )
+        LinkItem(
+            title = stringResource(R.string.saved_title),
+            description = stringResource(R.string.saved_hint),
+            onClick = actions.openSaved,
+            index = 1,
+            count = 3,
+        )
+        LinkItem(
+            title = stringResource(R.string.exports_title),
+            description = stringResource(R.string.exports_hint),
+            onClick = actions.openExports,
+            index = 2,
+            count = 3,
         )
     }
 }

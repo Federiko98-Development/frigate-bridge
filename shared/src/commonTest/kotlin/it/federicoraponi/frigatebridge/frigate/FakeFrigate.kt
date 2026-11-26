@@ -25,6 +25,7 @@ class FakeFrigate(
 ) {
     var recordings = """[{"start_time": 1000.2, "end_time": 1010.2}, {"start_time": 1010.2, "end_time": 1200.7}]"""
     var reviews = "[]"
+    var exports = "[]"
     var online = true
     var loginStatus: HttpStatusCode? = null
     var responseDelayMillis = 0L
@@ -61,6 +62,9 @@ class FakeFrigate(
             }
             "config" -> respond(config)
             "stats" -> respond("""{"service":{"uptime":120,"version":"$version"},"cameras":{}}""")
+            "recordings/storage" -> respond("""{"front_door":{"usage":2048.0,"usage_percent":4.0}}""")
+            "exports" -> respond(exports)
+            "exports/delete" -> respond("""{"success":true,"message":"Deleted"}""")
             "profiles" -> respond("""{"profiles":[],"active_profile":null,"last_activated":{}}""")
             "go2rtc/webrtc" -> respond("""{"type":"answer","sdp":"answer-for-${request.url.parameters["src"]}"}""")
             "front_door/recordings" -> respond(recordings)

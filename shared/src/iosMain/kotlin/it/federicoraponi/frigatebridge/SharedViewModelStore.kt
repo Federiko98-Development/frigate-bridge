@@ -13,10 +13,15 @@ import it.federicoraponi.frigatebridge.ui.CamerasViewModel
 import it.federicoraponi.frigatebridge.ui.EventArgs
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
+import it.federicoraponi.frigatebridge.ui.ExportArgs
+import it.federicoraponi.frigatebridge.ui.ExportViewModel
+import it.federicoraponi.frigatebridge.ui.ExportsArgs
+import it.federicoraponi.frigatebridge.ui.ExportsViewModel
 import it.federicoraponi.frigatebridge.ui.LockViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
+import it.federicoraponi.frigatebridge.ui.ServerStatusViewModel
 import it.federicoraponi.frigatebridge.ui.SettingsViewModel
 import it.federicoraponi.frigatebridge.ui.StartViewModel
 import it.federicoraponi.frigatebridge.ui.TimelineArgs
@@ -62,6 +67,16 @@ class SharedViewModelStore : ViewModelStoreOwner {
         serverId: String,
         reviewId: String,
     ): EventViewModel = resolve { KoinPlatform.getKoin().get { parametersOf(EventArgs(serverId, reviewId)) } }
+
+    fun serverStatusViewModel(): ServerStatusViewModel = resolve { KoinPlatform.getKoin().get() }
+
+    fun exportsViewModel(savedOnly: Boolean): ExportsViewModel =
+        resolve { KoinPlatform.getKoin().get { parametersOf(ExportsArgs(savedOnly)) } }
+
+    fun exportViewModel(
+        serverId: String,
+        exportId: String,
+    ): ExportViewModel = resolve { KoinPlatform.getKoin().get { parametersOf(ExportArgs(serverId, exportId)) } }
 
     fun clear() {
         viewModelStore.clear()

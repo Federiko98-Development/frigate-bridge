@@ -19,6 +19,7 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 - Keeps what it shows without a network, and reconnects when the phone changes network
 - Pinch to magnify the picture of the live view and of recordings
 - Photos from the live view and from recordings, and clips recorded from the live view, saved to the gallery
+- For administrators: server status, exported clips to play, download and delete, and events saved on the server
 - An optional app lock with fingerprint, face or screen lock
 - Camera groups, where each camera can be switched on or off
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion

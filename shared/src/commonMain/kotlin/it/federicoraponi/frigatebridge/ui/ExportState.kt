@@ -25,9 +25,10 @@ internal suspend fun ServerSession.cutExport(
     camera: String,
     start: Long,
     end: Long,
+    name: String? = null,
 ): ExportState =
     try {
-        val id = startExport(camera, start, end)
+        val id = startExport(camera, start, end, name)
         var file: ExportedFile? = null
         var checks = 0
         while (file == null && checks++ < EXPORT_CHECKS) {

@@ -105,6 +105,30 @@ class FrigateApi(
 
     suspend fun stats(): StatsDto = decode(get("stats"))
 
+    /** The space the recordings of each camera take. Needs the administrator role. */
+    suspend fun recordingStorage(): Map<String, CameraStorageDto> = decode(get("recordings/storage"))
+
+    /** The exports kept on the server, newest first. */
+    suspend fun exports(): List<ExportDto> = decode(get("exports"))
+
+    /** Removes exports and their files from the server. Needs the administrator role. */
+    suspend fun deleteExports(ids: List<String>) {
+        val body = buildJsonObject { putJsonArray("ids") { ids.forEach { add(it) } } }
+        call(HttpMethod.Post, "exports/delete", body.toString())
+    }
+
+    /**
+     * Marks a tracked object as one to keep, or no longer. The server keeps its entry and picture, and its video
+     * when it frees space; recordings still expire. Needs the administrator role.
+     */
+    suspend fun setRetained(
+        eventId: String,
+        retained: Boolean,
+    ) {
+        val method = if (retained) HttpMethod.Post else HttpMethod.Delete
+        call(method, "events/${eventId.encodeURLPathPart()}/retain", "{}")
+    }
+
     suspend fun frigateProfiles(): FrigateProfilesDto = decode(get("profiles"))
 
     /** The most recent picture of [camera] as a JPEG [height] pixels high. */
@@ -191,8 +215,12 @@ class FrigateApi(
         camera: String,
         start: Long,
         end: Long,
-    ): StartedExportDto =
-        decode(call(HttpMethod.Post, "export/${camera.encodeURLPathPart()}/start/$start/end/$end", "{}"))
+        name: String? = null,
+    ): StartedExportDto {
+        val body = buildJsonObject { if (name != null) put("name", name) }
+        val path = "export/${camera.encodeURLPathPart()}/start/$start/end/$end"
+        return decode(call(HttpMethod.Post, path, body.toString()))
+    }
 
     suspend fun export(id: String): ExportDto = decode(get("exports/${id.encodeURLPathPart()}"))
 

@@ -70,6 +70,11 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Recordings play as HLS from `/vod/<camera>/start/<s>/end/<e>/master.m3u8` (not under `/api`), with the same
   Bearer header on every request.
 
+- Marking an event as retained (`POST|DELETE /api/events/<id>/retain`, an endpoint Frigate calls legacy) does not
+  keep its recordings: they expire with the review retention days. To keep a moment the app marks its objects
+  and makes an export named `… #saved-<reviewId>`, which stays until deleted.
+- Server pages (statistics, exports, kept moments) are offered to administrators only.
+
 ## Android platform notes
 
 - Keep `androidx.navigationevent` at 1.2.0 or later: with 1.1.2 the app crashed when the back gesture was made

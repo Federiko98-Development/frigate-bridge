@@ -70,6 +70,8 @@ data class EventsState(
     val hasNoServer: Boolean = false,
     /** The phone has no network. */
     val isOffline: Boolean = false,
+    /** The user is an administrator of the server. */
+    val canManage: Boolean = false,
 ) {
     /** The day on screen, as `yyyy-mm-dd`. */
     val date: String get() = filter.date ?: today
@@ -302,6 +304,7 @@ class EventsViewModel(
                         state.copy(
                             cameras = cameras,
                             choices = choices,
+                            canManage = catalog?.canChangeSettings == true,
                             today = today,
                             filter = state.filter.copy(group = choice?.name),
                             labels = (state.labels + page.flatMap { it.labels }).distinct().sorted(),

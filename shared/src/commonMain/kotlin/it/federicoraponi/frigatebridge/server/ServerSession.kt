@@ -6,6 +6,7 @@ import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.camera.cameraCatalog
 import it.federicoraponi.frigatebridge.frigate.Credentials
+import it.federicoraponi.frigatebridge.frigate.ExportDto
 import it.federicoraponi.frigatebridge.frigate.FrigateApi
 import it.federicoraponi.frigatebridge.frigate.FrigateError
 import it.federicoraponi.frigatebridge.frigate.FrigateSocket
@@ -13,6 +14,7 @@ import it.federicoraponi.frigatebridge.frigate.PtzInfoDto
 import it.federicoraponi.frigatebridge.frigate.ReviewDto
 import it.federicoraponi.frigatebridge.frigate.TokenStore
 import it.federicoraponi.frigatebridge.frigate.isSupportedFrigateVersion
+import it.federicoraponi.frigatebridge.recordings.ExportItem
 import it.federicoraponi.frigatebridge.recordings.RecordingDay
 import it.federicoraponi.frigatebridge.recordings.RecordingSegment
 import it.federicoraponi.frigatebridge.recordings.ReviewItem
@@ -78,6 +80,19 @@ private fun ReviewDto.toItem(serverId: String) =
         zones = data.zones,
         thumbnailPath = thumbPath,
         isViewed = hasBeenReviewed,
+        detections = data.detections,
+    )
+
+private fun ExportDto.toItem(serverId: String) =
+    ExportItem(
+        serverId = serverId,
+        id = id,
+        camera = CameraRef(serverId, camera),
+        name = name,
+        date = date.toLong(),
+        videoPath = videoPath,
+        thumbnailPath = thumbPath,
+        inProgress = inProgress,
     )
 
 sealed interface ConnectionState {
@@ -295,8 +310,9 @@ class ServerSession(
         camera: String,
         start: Long,
         end: Long,
+        name: String? = null,
     ): String {
-        val started = connectedApi().startExport(camera, start, end)
+        val started = connectedApi().startExport(camera, start, end, name)
         return started.exportId?.takeIf { started.success }
             ?: throw FrigateError.UnexpectedResponse(started.message.ifBlank { "the export was not started" })
     }
@@ -312,6 +328,49 @@ class ServerSession(
             headers = api.authorizationHeaders(),
             certificateSha256 = server.certificateSha256,
         )
+    }
+
+    suspend fun statistics(): ServerStatistics {
+        val api = connectedApi()
+        val stats = api.stats()
+        // The figures about the disk are an extra: the others are worth showing without them.
+        val storage =
+            try {
+                api.recordingStorage()
+            } catch (_: FrigateError.UnexpectedResponse) {
+                emptyMap()
+            }
+        return serverStatistics(stats, storage)
+    }
+
+    suspend fun exports(): List<ExportItem> = connectedApi().exports().map { it.toItem(server.id) }
+
+    /** Where to play or download an export from. */
+    suspend fun fileOf(export: ExportItem): ExportedFile {
+        val api = connectedApi()
+        return ExportedFile(
+            url = api.mediaUrl(export.videoPath),
+            fileName = export.videoPath.substringAfterLast('/'),
+            headers = api.authorizationHeaders(),
+            certificateSha256 = server.certificateSha256,
+        )
+    }
+
+    suspend fun deleteExport(id: String) = connectedApi().deleteExports(listOf(id))
+
+    /** Marks the objects of a review moment as ones to keep, or no longer. Those the server forgot are passed over. */
+    suspend fun setRetained(
+        review: ReviewItem,
+        retained: Boolean,
+    ) {
+        val api = connectedApi()
+        review.detections.forEach { event ->
+            try {
+                api.setRetained(event, retained)
+            } catch (_: FrigateError.UnexpectedResponse) {
+                // The object is gone: there is nothing of it left to keep.
+            }
+        }
     }
 
     fun close() {

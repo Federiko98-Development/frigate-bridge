@@ -22,4 +22,6 @@ data class ReviewItem(
     /** Path of the small picture on the server. */
     val thumbnailPath: String,
     val isViewed: Boolean,
+    /** The tracked objects that make up the moment. */
+    val detections: List<String> = emptyList(),
 )
