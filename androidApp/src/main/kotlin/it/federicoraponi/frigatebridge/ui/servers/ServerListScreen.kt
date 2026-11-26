@@ -19,8 +19,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -31,7 +29,6 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -53,6 +50,7 @@ import it.federicoraponi.frigatebridge.ui.ServerListItem
 import it.federicoraponi.frigatebridge.ui.ServerListState
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
 import it.federicoraponi.frigatebridge.ui.ServerStatus
+import it.federicoraponi.frigatebridge.ui.designsystem.ConfirmSheet
 import it.federicoraponi.frigatebridge.ui.designsystem.ExpressiveMenu
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
@@ -172,7 +170,7 @@ fun ServerListScreen(
         }
     }
     state.servers.firstOrNull { it.id == removing }?.let { server ->
-        RemoveDialog(
+        RemoveSheet(
             name = server.name,
             onConfirm = {
                 removing = null
@@ -373,26 +371,17 @@ private fun ServerMenu(
 }
 
 @Composable
-private fun RemoveDialog(
+private fun RemoveSheet(
     name: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Delete, contentDescription = null) },
-        title = { Text(stringResource(R.string.server_remove_title, name)) },
-        text = { Text(stringResource(R.string.server_remove_message)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm, shapes = ButtonDefaults.shapes()) {
-                Text(stringResource(R.string.remove))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
+    ConfirmSheet(
+        title = stringResource(R.string.server_remove_title, name),
+        message = stringResource(R.string.server_remove_message),
+        confirmLabel = stringResource(R.string.remove),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
     )
 }
 

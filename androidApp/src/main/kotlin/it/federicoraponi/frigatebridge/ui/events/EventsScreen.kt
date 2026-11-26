@@ -45,9 +45,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.ui.EventsState
@@ -65,6 +67,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
 import it.federicoraponi.frigatebridge.ui.recordings.dayLabel
 import it.federicoraponi.frigatebridge.ui.recordings.minuteLabel
+import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import org.koin.androidx.compose.koinViewModel
 
 /** Alerts and detections of the active server. */
@@ -82,25 +85,54 @@ fun EventsRoute(
     }
     EventsScreen(
         state = state,
-        viewModel = viewModel,
-        onShowServers = onShowServers,
-        onOpenSaved = onOpenSaved,
-        onOpen = {
-            viewModel.markViewed(it)
-            onOpen(it)
-        },
+        actions =
+            EventsActions(
+                showServers = onShowServers,
+                switchTo = viewModel::switchTo,
+                openSaved = onOpenSaved,
+                open = {
+                    viewModel.markViewed(it)
+                    onOpen(it)
+                },
+                refresh = viewModel::refresh,
+                loadMore = viewModel::loadMore,
+                setSeverity = viewModel::setSeverity,
+                setGroup = viewModel::setGroup,
+                showCameras = viewModel::showCameras,
+                setLabel = viewModel::setLabel,
+                setMoment = viewModel::setMoment,
+                showToday = viewModel::showToday,
+                markAllViewed = viewModel::markAllViewed,
+                thumbnail = { viewModel.cachedThumbnail(it) ?: viewModel.loadThumbnail(it) },
+            ),
         bottomBar = bottomBar,
     )
 }
 
+/** What the list of moments can ask for. */
+data class EventsActions(
+    val showServers: () -> Unit = {},
+    val switchTo: (String) -> Unit = {},
+    val openSaved: () -> Unit = {},
+    val open: (ReviewItem) -> Unit = {},
+    val refresh: () -> Unit = {},
+    val loadMore: () -> Unit = {},
+    val setSeverity: (ReviewSeverity) -> Unit = {},
+    val setGroup: (String?) -> Unit = {},
+    val showCameras: (String?, Set<String>) -> Unit = { _, _ -> },
+    val setLabel: (String?) -> Unit = {},
+    val setMoment: (date: String, fromMinute: Int?) -> Unit = { _, _ -> },
+    val showToday: () -> Unit = {},
+    val markAllViewed: () -> Unit = {},
+    val thumbnail: suspend (ReviewItem) -> ByteArray? = { null },
+)
+
 @Composable
-private fun EventsScreen(
+fun EventsScreen(
     state: EventsState,
-    viewModel: EventsViewModel,
-    onShowServers: () -> Unit,
-    onOpen: (ReviewItem) -> Unit,
-    onOpenSaved: () -> Unit,
-    bottomBar: @Composable () -> Unit,
+    actions: EventsActions,
+    modifier: Modifier = Modifier,
+    bottomBar: @Composable () -> Unit = {},
 ) {
     var picking by rememberSaveable { mutableStateOf(false) }
     if (picking) {
@@ -111,18 +143,19 @@ private fun EventsScreen(
             onDismiss = { picking = false },
             onPick = { date, fromMinute ->
                 picking = false
-                viewModel.setMoment(date, fromMinute)
+                actions.setMoment(date, fromMinute)
             },
         )
     }
     Scaffold(
+        modifier = modifier,
         bottomBar = bottomBar,
         topBar = {
             TopAppBar(
-                title = { ServerSwitcher(state.server, state.servers, viewModel::switchTo, onShowServers) },
+                title = { ServerSwitcher(state.server, state.servers, actions.switchTo, actions.showServers) },
                 actions = {
                     if (state.canManage) {
-                        IconButton(onClick = onOpenSaved, shapes = IconButtonDefaults.shapes()) {
+                        IconButton(onClick = actions.openSaved, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Filled.Star, contentDescription = stringResource(R.string.saved_title))
                         }
                     }
@@ -135,10 +168,10 @@ private fun EventsScreen(
     ) { innerPadding ->
         RefreshableContent(
             isRefreshing = state.isRefreshing,
-            onRefresh = viewModel::refresh,
+            onRefresh = actions.refresh,
             modifier = Modifier.padding(innerPadding),
         ) {
-            EventList(state, viewModel, onOpen, onChooseMoment = { picking = true })
+            EventList(state, actions, onChooseMoment = { picking = true })
         }
     }
 }
@@ -146,8 +179,7 @@ private fun EventsScreen(
 @Composable
 private fun EventList(
     state: EventsState,
-    viewModel: EventsViewModel,
-    onOpen: (ReviewItem) -> Unit,
+    actions: EventsActions,
     onChooseMoment: () -> Unit,
 ) {
     LazyColumn(
@@ -155,15 +187,15 @@ private fun EventList(
         contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
-        item(key = "filters") { Filters(state, viewModel) }
-        item(key = "moment") { ShownMoment(state, viewModel, onChooseMoment) }
+        item(key = "filters") { Filters(state, actions) }
+        item(key = "moment") { ShownMoment(state, actions, onChooseMoment) }
         if (state.isOffline) item(key = "offline") { OfflineNotice() }
         state.problem?.takeUnless { state.isOffline }?.let { problem ->
             item(key = "problem") {
                 NoticeCard(
                     message = problemText(problem),
                     actionLabel = stringResource(R.string.retry),
-                    onAction = viewModel::refresh,
+                    onAction = actions.refresh,
                     announce = true,
                 )
             }
@@ -184,12 +216,12 @@ private fun EventList(
             val name =
                 state.cameras.firstOrNull { it.ref == moment.camera }?.displayName
                     ?: moment.camera.cameraName
-            EventRow(moment, name, index, state.items.size, viewModel, onClick = { onOpen(moment) })
+            EventRow(moment, name, index, state.items.size, actions)
         }
         if (state.hasMore) {
             item(key = "more") {
                 // Reached the end of the list: ask for what came before.
-                LaunchedEffect(state.items.size) { viewModel.loadMore() }
+                LaunchedEffect(state.items.size) { actions.loadMore() }
                 Waiting()
             }
         }
@@ -206,20 +238,20 @@ private fun Waiting() {
 @Composable
 private fun Filters(
     state: EventsState,
-    viewModel: EventsViewModel,
+    actions: EventsActions,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         ConnectedChoice(
             labels = listOf(stringResource(R.string.events_alerts), stringResource(R.string.events_detections)),
             selected = state.filter.severity.ordinal,
-            onSelect = { viewModel.setSeverity(ReviewSeverity.entries[it]) },
+            onSelect = { actions.setSeverity(ReviewSeverity.entries[it]) },
         )
         if (state.choices.isNotEmpty()) {
             CameraGroupBar(
                 choices = state.choices,
                 selected = state.filter.group,
-                onSelect = viewModel::setGroup,
-                onShow = viewModel::showCameras,
+                onSelect = actions.setGroup,
+                onShow = actions.showCameras,
             )
         }
         // The chosen label stays on offer even if the list it filtered no longer mentions others.
@@ -229,7 +261,7 @@ private fun Filters(
             ConnectedChoice(
                 labels = names,
                 selected = labels.indexOf(state.filter.label) + 1,
-                onSelect = { viewModel.setLabel(if (it == 0) null else labels[it - 1]) },
+                onSelect = { actions.setLabel(if (it == 0) null else labels[it - 1]) },
             )
         }
     }
@@ -239,7 +271,7 @@ private fun Filters(
 @Composable
 private fun ShownMoment(
     state: EventsState,
-    viewModel: EventsViewModel,
+    actions: EventsActions,
     onChoose: () -> Unit,
 ) {
     if (state.date.isEmpty()) return
@@ -254,13 +286,13 @@ private fun ShownMoment(
             Text(listOfNotNull(day, from).joinToString(" · "))
         }
         if (state.filter.date != null || state.filter.fromMinute != null) {
-            IconButton(onClick = viewModel::showToday, shapes = IconButtonDefaults.shapes()) {
+            IconButton(onClick = actions.showToday, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.events_today_again))
             }
         }
         Spacer(modifier = Modifier.weight(1f))
         if (state.items.any { !it.isViewed }) {
-            TextButton(onClick = viewModel::markAllViewed, shapes = ButtonDefaults.shapes()) {
+            TextButton(onClick = actions.markAllViewed, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(R.string.events_mark_all_short))
             }
         }
@@ -301,12 +333,11 @@ private fun EventRow(
     cameraName: String,
     index: Int,
     count: Int,
-    viewModel: EventsViewModel,
-    onClick: () -> Unit,
+    actions: EventsActions,
 ) {
     val colors = MaterialTheme.colorScheme
     Surface(
-        onClick = onClick,
+        onClick = { actions.open(moment) },
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         shape = ListItemDefaults.segmentedShapes(index = index, count = count).shape,
         color = colors.surfaceContainer,
@@ -316,7 +347,7 @@ private fun EventRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Thumbnail(moment.id) { viewModel.cachedThumbnail(moment) ?: viewModel.loadThumbnail(moment) }
+            Thumbnail(moment.id) { actions.thumbnail(moment) }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val seen = moment.labels.map { labelName(it) }
                 Text(
@@ -345,5 +376,29 @@ private fun EventRow(
                 )
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun EventsScreenPreview() {
+    val moment =
+        ReviewItem(
+            serverId = "home",
+            id = "moment",
+            camera = CameraRef("home", "front_door"),
+            start = 1_800_000_000,
+            end = 1_800_000_025,
+            severity = ReviewSeverity.Alert,
+            labels = listOf("person"),
+            zones = emptyList(),
+            thumbnailPath = "",
+            isViewed = false,
+        )
+    FrigateBridgeTheme {
+        EventsScreen(
+            state = EventsState(items = listOf(moment), isLoading = false, today = "2027-01-15"),
+            actions = EventsActions(),
+        )
     }
 }

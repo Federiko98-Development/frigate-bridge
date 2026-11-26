@@ -26,10 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.recordings.ExportItem
 import it.federicoraponi.frigatebridge.ui.ExportsArgs
 import it.federicoraponi.frigatebridge.ui.ExportsState
@@ -44,6 +46,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.Thumbnail
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.recordings.dayAndTime
+import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -63,31 +66,48 @@ fun ExportsRoute(
         viewModel.load()
         onPauseOrDispose {}
     }
-    ExportsScreen(state, viewModel, onClose, onOpen)
+    ExportsScreen(
+        state = state,
+        actions =
+            ExportsActions(
+                close = onClose,
+                open = onOpen,
+                refresh = viewModel::refresh,
+                thumbnail = { viewModel.cachedThumbnail(it) ?: viewModel.loadThumbnail(it) },
+            ),
+    )
 }
 
+/** What a list of exports can ask for. */
+data class ExportsActions(
+    val close: () -> Unit = {},
+    val open: (ExportItem) -> Unit = {},
+    val refresh: () -> Unit = {},
+    val thumbnail: suspend (ExportItem) -> ByteArray? = { null },
+)
+
 @Composable
-private fun ExportsScreen(
+fun ExportsScreen(
     state: ExportsState,
-    viewModel: ExportsViewModel,
-    onClose: () -> Unit,
-    onOpen: (ExportItem) -> Unit,
+    actions: ExportsActions,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = {
                     ScreenTitle(stringResource(if (state.savedOnly) R.string.saved_title else R.string.exports_title))
                 },
                 navigationIcon = {
-                    BackButton(onClose)
+                    BackButton(actions.close)
                 },
             )
         },
     ) { innerPadding ->
         RefreshableContent(
             isRefreshing = state.isRefreshing,
-            onRefresh = viewModel::refresh,
+            onRefresh = actions.refresh,
             modifier = Modifier.padding(innerPadding),
         ) {
             if (state.isLoading) {
@@ -104,7 +124,7 @@ private fun ExportsScreen(
                         NoticeCard(
                             message = failureText(failure, R.string.exports_failed),
                             actionLabel = stringResource(R.string.retry),
-                            onAction = viewModel::refresh,
+                            onAction = actions.refresh,
                             announce = true,
                         )
                     }
@@ -126,7 +146,7 @@ private fun ExportsScreen(
                     }
                 }
                 itemsIndexed(state.items, key = { _, item -> item.id }) { index, item ->
-                    ExportRow(item, state, index, viewModel, onOpen)
+                    ExportRow(item, state, index, actions)
                 }
             }
         }
@@ -138,12 +158,11 @@ private fun ExportRow(
     item: ExportItem,
     state: ExportsState,
     index: Int,
-    viewModel: ExportsViewModel,
-    onOpen: (ExportItem) -> Unit,
+    actions: ExportsActions,
 ) {
     val colors = MaterialTheme.colorScheme
     Surface(
-        onClick = { onOpen(item) },
+        onClick = { actions.open(item) },
         enabled = !item.inProgress,
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         shape = ListItemDefaults.segmentedShapes(index = index, count = state.items.size).shape,
@@ -154,7 +173,7 @@ private fun ExportRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Thumbnail(item.id, item.inProgress) { viewModel.cachedThumbnail(item) ?: viewModel.loadThumbnail(item) }
+            Thumbnail(item.id, item.inProgress) { actions.thumbnail(item) }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     item.title.replace('_', ' '),
@@ -174,5 +193,17 @@ private fun ExportRow(
                 )
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun ExportsScreenPreview() {
+    val item = ExportItem("home", "a", CameraRef("home", "front_door"), "Front door clip", 1_800_000_000, "", "", false)
+    FrigateBridgeTheme {
+        ExportsScreen(
+            state = ExportsState(items = listOf(item), isLoading = false),
+            actions = ExportsActions(),
+        )
     }
 }

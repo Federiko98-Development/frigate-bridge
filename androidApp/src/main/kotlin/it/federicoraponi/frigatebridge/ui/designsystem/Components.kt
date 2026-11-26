@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
@@ -174,6 +175,40 @@ fun rememberFullSheetState(): SheetState =
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
     )
+
+/** Asks before something that cannot be undone, with room to explain what it does. */
+@Composable
+fun ConfirmSheet(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberFullSheetState()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+        ) {
+            SheetTitle(title, textAlign = TextAlign.Center)
+            Text(message, textAlign = TextAlign.Center)
+            Button(
+                onClick = onConfirm,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                shapes = ButtonDefaults.shapes(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(confirmLabel) }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    }
+}
 
 /** Keeps the screen on while this is shown, e.g. while a video is being watched. */
 @Composable

@@ -119,6 +119,6 @@ fun DownloadProgress(onCancel: () -> Unit) {
 
 /** Why the last share failed, if it did. */
 @Composable
-fun SharingFailure(sharing: ExportSharing) {
-    sharing.failure?.let { NoticeCard(stringResource(R.string.export_failed) + "\n" + it, announce = true) }
+fun SharingFailure(failure: String?) {
+    failure?.let { NoticeCard(stringResource(R.string.export_failed) + "\n" + it, announce = true) }
 }

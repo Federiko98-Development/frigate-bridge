@@ -2,6 +2,7 @@ package it.federicoraponi.frigatebridge.ui.exports
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,15 +12,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -36,9 +36,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.camera.CameraRef
+import it.federicoraponi.frigatebridge.recordings.ExportItem
+import it.federicoraponi.frigatebridge.server.ExportedFile
 import it.federicoraponi.frigatebridge.server.RecordingClip
 import it.federicoraponi.frigatebridge.ui.ExportArgs
 import it.federicoraponi.frigatebridge.ui.ExportViewModel
@@ -59,17 +63,17 @@ import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
 import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
 import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
 import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
+import it.federicoraponi.frigatebridge.ui.designsystem.ConfirmSheet
 import it.federicoraponi.frigatebridge.ui.designsystem.KeepScreenOn
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
-import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
-import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
 import it.federicoraponi.frigatebridge.ui.recordings.DownloadProgress
 import it.federicoraponi.frigatebridge.ui.recordings.SharingFailure
 import it.federicoraponi.frigatebridge.ui.recordings.rememberExportSharing
+import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -122,16 +126,60 @@ fun ExportRoute(
         FullscreenPlayer(title, player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
         return
     }
-    var confirming by rememberSaveable { mutableStateOf(false) }
     val sharing = rememberExportSharing()
+    ExportScreen(
+        state = state,
+        player = player,
+        isBusy = sharing.isBusy,
+        sharingFailure = sharing.failure,
+        messages = captures.messages,
+        actions =
+            ExportActions(
+                close = onClose,
+                fullscreen = { fullscreen = true },
+                takePhoto = takePhoto,
+                save = { file, item ->
+                    sharing.whileBusy { captures.saveClip(file, item.camera.cameraName, item.date) }
+                },
+                share = sharing::share,
+                cancel = sharing::cancel,
+                delete = viewModel::delete,
+            ),
+        video = { picture() },
+    )
+}
+
+/** What the page of an export can ask for. */
+data class ExportActions(
+    val close: () -> Unit = {},
+    val fullscreen: () -> Unit = {},
+    val takePhoto: (() -> Unit)? = null,
+    val save: (ExportedFile, ExportItem) -> Unit = { _, _ -> },
+    val share: (ExportedFile) -> Unit = {},
+    val cancel: () -> Unit = {},
+    val delete: () -> Unit = {},
+)
+
+@Composable
+fun ExportScreen(
+    state: ExportViewState,
+    player: Player?,
+    isBusy: Boolean,
+    sharingFailure: String?,
+    messages: SnackbarHostState,
+    actions: ExportActions,
+    video: @Composable BoxScope.() -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    val name = state.item?.title.orEmpty()
     Scaffold(
-        snackbarHost = { SnackbarHost(captures.messages) },
+        modifier = modifier,
+        snackbarHost = { SnackbarHost(messages) },
         topBar = {
             TopAppBar(
                 title = { ScreenTitle(stringResource(R.string.export_page_title)) },
-                navigationIcon = {
-                    BackButton(onClose)
-                },
+                navigationIcon = { BackButton(actions.close) },
             )
         },
     ) { innerPadding ->
@@ -145,10 +193,10 @@ fun ExportRoute(
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            VideoFrame { picture() }
+            VideoFrame(video)
             RecordingTransport(player, onSkip = { player?.seekBy(it) })
-            takePhoto?.let { PhotoButton(it) }
-            FullscreenButton { fullscreen = true }
+            actions.takePhoto?.let { PhotoButton(it) }
+            FullscreenButton(actions.fullscreen)
             if (name.isNotEmpty()) {
                 Text(
                     name.replace('_', ' '),
@@ -156,26 +204,23 @@ fun ExportRoute(
                     textAlign = TextAlign.Center,
                 )
             }
+            val item = state.item
             state.file?.let { file ->
-                if (sharing.isBusy) {
-                    DownloadProgress(onCancel = sharing::cancel)
-                } else {
+                if (isBusy) {
+                    DownloadProgress(onCancel = actions.cancel)
+                } else if (item != null) {
                     PrimaryButton(
                         text = stringResource(R.string.export_save),
-                        onClick = {
-                            val item = state.item ?: return@PrimaryButton
-                            sharing.whileBusy { captures.saveClip(file, item.camera.cameraName, item.date) }
-                        },
+                        onClick = { actions.save(file, item) },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    FilledTonalButton(onClick = { sharing.share(file) }, shapes = ButtonDefaults.shapes()) {
+                    FilledTonalButton(onClick = { actions.share(file) }, shapes = ButtonDefaults.shapes()) {
                         Icon(Icons.Filled.Share, contentDescription = null)
                         Text(stringResource(R.string.export_share), modifier = Modifier.padding(start = Spacing.sm))
                     }
                 }
             }
-            SharingFailure(sharing)
-            val item = state.item
+            SharingFailure(sharingFailure)
             if (item != null && !item.inProgress) {
                 TextButton(
                     onClick = { confirming = true },
@@ -195,13 +240,16 @@ fun ExportRoute(
         }
     }
     if (confirming) {
-        DeleteSheet(
-            isSaved = state.item?.savedReviewId != null,
-            onDismiss = { confirming = false },
-            onDelete = {
+        val saved = state.item?.savedReviewId != null
+        ConfirmSheet(
+            title = stringResource(R.string.export_delete_title),
+            message = stringResource(if (saved) R.string.export_delete_saved else R.string.export_delete_message),
+            confirmLabel = stringResource(R.string.export_delete),
+            onConfirm = {
                 confirming = false
-                viewModel.delete()
+                actions.delete()
             },
+            onDismiss = { confirming = false },
         )
     }
 }
@@ -225,40 +273,19 @@ private fun ExportVideo(
     }
 }
 
-/** Asks before a file is removed from the server, which cannot be undone. */
+@Preview
 @Composable
-private fun DeleteSheet(
-    isSaved: Boolean,
-    onDismiss: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberFullSheetState(),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
-        ) {
-            SheetTitle(stringResource(R.string.export_delete_title))
-            Text(
-                stringResource(if (isSaved) R.string.export_delete_saved else R.string.export_delete_message),
-                textAlign = TextAlign.Center,
-            )
-            Button(
-                onClick = onDelete,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                shapes = ButtonDefaults.shapes(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.export_delete)) }
-            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
+private fun ExportScreenPreview() {
+    val item = ExportItem("home", "a", CameraRef("home", "front_door"), "Front door clip", 1_800_000_000, "", "", false)
+    FrigateBridgeTheme {
+        ExportScreen(
+            state = ExportViewState(item = item),
+            player = null,
+            isBusy = false,
+            sharingFailure = null,
+            messages = SnackbarHostState(),
+            actions = ExportActions(),
+            video = {},
+        )
     }
 }

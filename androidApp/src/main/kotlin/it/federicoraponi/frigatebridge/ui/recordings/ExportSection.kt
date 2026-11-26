@@ -62,5 +62,5 @@ private fun ReadyExport(
         PrimaryButton(text = stringResource(R.string.export_share), onClick = { sharing.share(file) })
         TextButton(onClick = onDone, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.close)) }
     }
-    SharingFailure(sharing)
+    SharingFailure(sharing.failure)
 }
