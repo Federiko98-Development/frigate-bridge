@@ -149,7 +149,8 @@ private fun EventScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { ScreenTitle(state.cameraName) },
+                // The camera is not known yet, or the server no longer has the moment.
+                title = { ScreenTitle(state.cameraName.ifEmpty { stringResource(R.string.event_title) }) },
                 navigationIcon = {
                     IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
                         Icon(

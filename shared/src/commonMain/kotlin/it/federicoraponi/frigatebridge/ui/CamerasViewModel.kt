@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -108,8 +109,15 @@ class CamerasViewModel(
             // On a new network the server is read again: it may answer on its other address.
             combine(servers, network.status.connections()) { server, connection -> server to connection }
                 // Switching server abandons the request to the previous one.
-                .collectLatest { (server, _) -> server.first?.let { registry.session(it)?.refresh() } }
+                .collectLatest { (server, _) -> server.first?.let { connect(it) } }
         }
+    }
+
+    private suspend fun connect(serverId: String) {
+        val session = registry.session(serverId) ?: return
+        // Without a network, reading a connected server again would only replace its cameras with an error.
+        val isOnline = network.status.first().isOnline
+        if (isOnline || session.state.value !is ConnectionState.Connected) session.refresh()
     }
 
     fun selectGroup(name: String?) {
