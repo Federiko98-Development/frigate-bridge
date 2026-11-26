@@ -1,5 +1,6 @@
 package it.federicoraponi.frigatebridge.security
 
+import android.app.KeyguardManager
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.biometric.AuthenticationRequest
@@ -17,6 +18,9 @@ import it.federicoraponi.frigatebridge.ui.LockViewModel
 fun Context.canAuthenticateUser(): Boolean =
     BiometricManager.from(this).canAuthenticate(BIOMETRIC_WEAK or DEVICE_CREDENTIAL) ==
         BiometricManager.BIOMETRIC_SUCCESS
+
+/** Whether the phone asks for something before it opens. When in doubt it does. */
+private fun Context.hasScreenLock(): Boolean = getSystemService(KeyguardManager::class.java)?.isDeviceSecure != false
 
 /**
  * Asks the system for the fingerprint, the face or the phone's code and tells [lock] how it went. Create it
@@ -40,8 +44,9 @@ class AppLockPrompt(
         )
 
     fun ask(purpose: LockPurpose) {
-        if (!activity.canAuthenticateUser()) {
-            // The screen lock was removed after the app lock was turned on.
+        // Only a phone without any screen lock leaves nothing to ask for, e.g. after it was removed with the app
+        // lock on. Any other trouble is left to the prompt, and the app stays locked until it succeeds.
+        if (!activity.hasScreenLock()) {
             if (purpose == LockPurpose.Unlock) lock.cannotAuthenticate()
             return
         }

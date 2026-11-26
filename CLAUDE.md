@@ -80,6 +80,7 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   again, which also picks between its two addresses; offline, screens keep what they show and say so.
 - The app lock (`LockViewModel`, `security/AppLock.kt`) does not cover the app: while locked, `AppNavigation` is not
   composed, so no video, preview or link runs behind it. It locks on start and after 10 s out of sight.
+  It opens without a prompt only when the phone has no screen lock (`isDeviceSecure`): never on another error.
 - Plain HTTP is allowed on purpose (Frigate on a home network); the server form warns about it.
 - Passwords and tokens are encrypted with an Android Keystore key; backups and device transfer are disabled.
 
