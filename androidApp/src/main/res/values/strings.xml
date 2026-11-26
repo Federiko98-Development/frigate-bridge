@@ -274,4 +274,8 @@
         <item quantity="one">%1$d of %2$d camera shown</item>
         <item quantity="other">%1$d of %2$d cameras shown</item>
     </plurals>
+    <string name="picture_look_left">Look further left</string>
+    <string name="picture_look_right">Look further right</string>
+    <string name="picture_look_up">Look further up</string>
+    <string name="picture_look_down">Look further down</string>
 </resources>

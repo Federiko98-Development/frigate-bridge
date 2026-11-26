@@ -49,6 +49,9 @@ private const val DOUBLE_TAP_SCALE = 2.5f
 // One step of the zoom offered to screen readers, which cannot pinch.
 private const val ACCESSIBLE_ZOOM_STEP = 1.5f
 
+// One step of their way around a magnified picture, as a part of its area.
+private const val ACCESSIBLE_MOVE_STEP = 0.25f
+
 /** The magnification of a picture on the phone: nothing to do with the camera's own zoom. */
 @Stable
 private class DigitalZoom {
@@ -90,6 +93,12 @@ private class DigitalZoom {
     /** Magnifies by [factor] around the point in the middle of the area. */
     fun zoomBy(factor: Float) = change(centre, Offset.Zero, factor)
 
+    /** Moves the view by these parts of the area: negative looks further right or down. */
+    fun move(
+        across: Float,
+        down: Float,
+    ) = change(centre, Offset(area.width * across, area.height * down), 1f)
+
     fun toggle(at: Offset) {
         if (isZoomed) reset() else change(at, Offset.Zero, DOUBLE_TAP_SCALE / scale)
     }
@@ -125,6 +134,14 @@ fun ZoomableVideo(
     val zoomIn = stringResource(R.string.picture_zoom_in)
     val zoomOut = stringResource(R.string.picture_zoom_out)
     val reset = stringResource(R.string.picture_zoom_reset)
+    // The way to look, with how the picture moves under the view to get there.
+    val moves =
+        listOf(
+            stringResource(R.string.picture_look_left) to Offset(ACCESSIBLE_MOVE_STEP, 0f),
+            stringResource(R.string.picture_look_right) to Offset(-ACCESSIBLE_MOVE_STEP, 0f),
+            stringResource(R.string.picture_look_up) to Offset(0f, ACCESSIBLE_MOVE_STEP),
+            stringResource(R.string.picture_look_down) to Offset(0f, -ACCESSIBLE_MOVE_STEP),
+        )
     // Read here, so that the actions offered change with them; they change far less often than the scale.
     val zoomedState = remember(zoom) { derivedStateOf { zoom.isZoomed } }
     val canZoomInState = remember(zoom) { derivedStateOf { zoom.canZoomIn } }
@@ -149,7 +166,13 @@ fun ZoomableVideo(
                             zoom.reset()
                             true
                         }.takeIf { zoomed },
-                    )
+                    ) +
+                    moves.takeIf { zoomed }.orEmpty().map { (label, by) ->
+                        CustomAccessibilityAction(label) {
+                            zoom.move(by.x, by.y)
+                            true
+                        }
+                    }
             }
         }
     Box(

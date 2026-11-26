@@ -274,4 +274,8 @@
         <item quantity="many">%1$d di %2$d telecamere mostrate</item>
         <item quantity="other">%1$d di %2$d telecamere mostrate</item>
     </plurals>
+    <string name="picture_look_left">Sposta la vista a sinistra</string>
+    <string name="picture_look_right">Sposta la vista a destra</string>
+    <string name="picture_look_up">Sposta la vista in alto</string>
+    <string name="picture_look_down">Sposta la vista in basso</string>
 </resources>

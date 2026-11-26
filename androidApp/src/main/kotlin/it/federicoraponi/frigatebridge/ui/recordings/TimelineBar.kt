@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -78,6 +79,8 @@ private const val FOLLOW_MILLIS = 1_500L
 
 // How close the cursor must be, on screen, to the start of a clip to hold on to it.
 private val SNAP_REACH = 12.dp
+
+private val RANGE_EDGE = 1.5.dp
 
 // A moment shorter than this would be too thin to see.
 private val MIN_MARK_WIDTH = 3.dp
@@ -238,7 +241,11 @@ fun TimelineBar(
                         val left = x(range.start)
                         val right = x(range.end)
                         if (right >= 0f && left <= size.width) {
-                            drawRect(colors.primaryContainer, Offset(left, barTop), Size(right - left, barHeight))
+                            val corner = Offset(left, barTop)
+                            val area = Size(right - left, barHeight)
+                            drawRect(colors.primaryContainer, corner, area)
+                            // The edge is what stands out from the strip; the fill leaves the marks on it readable.
+                            drawRect(colors.primary, corner, area, style = Stroke(RANGE_EDGE.toPx()))
                         }
                     }
                     markers.forEach { marker ->
