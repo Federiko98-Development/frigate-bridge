@@ -108,14 +108,13 @@ fun CameraRoute(
         captures.takePhoto(state.title, time)
     }
     // A finished clip is saved as soon as the server has it.
-    val ready = state.clip as? ClipState.Ready
-    LaunchedEffect(ready) {
-        if (ready != null) {
-            // Seen through even if the page goes meanwhile, e.g. because the app locks: once, and not again.
-            withContext(NonCancellable) {
-                captures.saveClip(ready.file, state.title, ready.startedAt)
-                viewModel.clearClip()
-            }
+    val isClipReady = state.clip is ClipState.Ready
+    LaunchedEffect(isClipReady) {
+        // Seen through even if the page goes meanwhile, e.g. because the app locks.
+        withContext(NonCancellable) {
+            val clip = viewModel.takeClip() ?: return@withContext
+            captures.saveClip(clip.file, state.title, clip.startedAt)
+            viewModel.clipSaved()
         }
     }
     // The video moves between the page and full screen without being rebuilt, so it keeps playing.

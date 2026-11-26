@@ -17,7 +17,10 @@ sealed interface ClipState {
     /** Stopped: the server is putting the file together. */
     data object Preparing : ClipState
 
-    /** To be saved on the phone, then cleared. */
+    /** Being saved on the phone. */
+    data object Saving : ClipState
+
+    /** To be saved on the phone. */
     data class Ready(
         val file: ExportedFile,
         /** When the recording started, in seconds since the epoch. */

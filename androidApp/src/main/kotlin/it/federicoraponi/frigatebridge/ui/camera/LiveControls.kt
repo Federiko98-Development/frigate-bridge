@@ -109,7 +109,7 @@ internal fun ClipStatus(
 ) {
     when (clip) {
         is ClipState.Recording -> RecordingBadge(clip.startedAt)
-        ClipState.Preparing, is ClipState.Ready -> {
+        ClipState.Preparing, is ClipState.Ready, ClipState.Saving -> {
             StatusText(stringResource(R.string.clip_preparing))
             LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         }

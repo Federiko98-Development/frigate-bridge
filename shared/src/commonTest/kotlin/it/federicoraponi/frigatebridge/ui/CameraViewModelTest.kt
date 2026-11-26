@@ -55,6 +55,8 @@ class CameraViewModelTest : ViewModelTest() {
 
             val ready = viewModel.state.first { it.clip is ClipState.Ready }.clip as ClipState.Ready
             assertEquals("clip.mp4", ready.file.fileName)
+            assertEquals(ready, viewModel.takeClip())
+            assertEquals(null, viewModel.takeClip())
             assertEquals(
                 emptySet(),
                 fixture.settings.settings

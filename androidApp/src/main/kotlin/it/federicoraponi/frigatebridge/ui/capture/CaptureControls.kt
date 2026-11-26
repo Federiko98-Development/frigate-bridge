@@ -49,7 +49,11 @@ fun ClipButton(
     FilledTonalIconToggleButton(
         checked = recording,
         onCheckedChange = { if (it) onStart() else onStop() },
-        enabled = clip != ClipState.Starting && clip != ClipState.Preparing && clip !is ClipState.Ready,
+        enabled =
+            clip != ClipState.Starting &&
+                clip != ClipState.Preparing &&
+                clip !is ClipState.Ready &&
+                clip != ClipState.Saving,
         colors =
             IconButtonDefaults.filledTonalIconToggleButtonColors(
                 checkedContainerColor = MaterialTheme.colorScheme.error,

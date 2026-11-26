@@ -200,11 +200,21 @@ class CameraViewModel(
             }
     }
 
-    /** The file was saved, or the message about it dismissed. */
+    /** Hands a finished clip over to be saved: once, also if the screen asks again. */
+    fun takeClip(): ClipState.Ready? {
+        val ready = mutableState.value.clip as? ClipState.Ready ?: return null
+        mutableState.update { it.copy(clip = ClipState.Saving) }
+        return ready
+    }
+
+    fun clipSaved() {
+        mutableState.update { if (it.clip == ClipState.Saving) it.copy(clip = ClipState.None) else it }
+    }
+
+    /** The message about a clip was dismissed. */
     fun clearClip() {
         mutableState.update {
-            val done = it.clip is ClipState.Ready || it.clip is ClipState.Failed
-            if (done) it.copy(clip = ClipState.None) else it
+            if (it.clip is ClipState.Failed) it.copy(clip = ClipState.None) else it
         }
     }
 
