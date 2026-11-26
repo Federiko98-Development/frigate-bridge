@@ -25,8 +25,39 @@ responses that have not been anonymized. Use made-up values in tests and example
 - `shared/`: models, Frigate client, repositories, ViewModels with `StateFlow`. No UI.
   - `commonMain` for logic; `androidMain` and `iosMain` only for platform parts (`expect`/`actual`).
   - `commonTest` for tests (kotlin.test, coroutines-test, Turbine).
-- `androidApp/`: Jetpack Compose, Material 3 Expressive. Screens in `ui/<feature>/`, theme in `ui/theme/`.
+  - Packages: `frigate/` (the only code that calls Frigate), `server/` (saved servers, secrets, sessions),
+    `camera/` (cameras and groups), `ui/` (ViewModels).
+- `androidApp/`: Jetpack Compose. Screens in `ui/<feature>/`, shared components in `ui/designsystem/`,
+  theme in `ui/theme/`.
 - `iosApp/`: Xcode project.
+
+## Design: Material 3 Expressive everywhere
+
+Every screen, forms included, uses Material 3 Expressive. A themed classic Material component is not enough.
+
+- Container-first layout: content sits in tonal, generously rounded containers; no shadows or dividers.
+  At most one hero card (`primaryContainer`) per screen.
+- Lists and form fields are segmented groups (`SegmentedListItem`, `ListItemDefaults.segmentedShapes`).
+- Buttons and icon buttons use the shape-morphing `shapes` overloads; accents use `MaterialShapes`.
+- Choices between a few options are connected `ToggleButton` groups; menus use `ExpressiveMenu`.
+- Flexible top app bars, `ContainedLoadingIndicator`, bottom sheets for decisions that need explanation.
+- Check each screen on a device or emulator, in light and dark, before calling it done.
+
+## Frigate facts the client relies on (verified against 0.18.3)
+
+- `POST /api/login` answers with an empty body; the token is in a cookie whose name is configurable.
+- The server renews cookie sessions only, never `Authorization: Bearer` tokens: log in again on 401.
+- `/api/version` requires authentication behind the proxy, so it doubles as the login probe.
+- Login returns 404 when authentication is disabled, and 429 when rate limited.
+- A camera group's `cameras` is a list or a comma-separated string.
+- The self-signed certificate does not name the server's address.
+
+## Android platform notes
+
+- Android 17 (target 37) blocks the local network until `ACCESS_LOCAL_NETWORK` is granted; connections time
+  out without it.
+- Plain HTTP is allowed on purpose (Frigate on a home network); the server form warns about it.
+- Passwords and tokens are encrypted with an Android Keystore key; backups and device transfer are disabled.
 
 ## Conventions
 
@@ -38,6 +69,7 @@ responses that have not been anonymized. Use made-up values in tests and example
 - Only the client in `shared` calls Frigate; screens never call the API.
 - Every object that belongs to a server carries its `serverId` (e.g. `CameraRef(serverId, cameraName)`).
 - Within a feature: `shared` with tests first, then the Compose screen.
+- Tests use fake Frigate servers (`FakeFrigate`, `FakeNetwork`) and made-up data.
 - UI text is never hardcoded: English in `res/values/strings.xml`, Italian in `res/values-it/strings.xml`.
 - Library versions live only in `gradle/libs.versions.toml`.
 
@@ -72,5 +104,7 @@ which is where SKIE runs, does need it):
 - Connect the `Shared` framework to SwiftUI screens: one `@Observable` store per ViewModel, which uses
   `SharedViewModelStore` and calls `clear()` on destruction; `startSharedKoin()` at launch.
 - Linking the framework and SKIE have not been tried yet: verify them first.
+- Not implemented on iOS yet: Keychain storage (`MemorySecretStore` loses passwords when the app closes),
+  accepting a self-signed certificate, and the local network usage description in `Info.plist`.
 - The Xcode build phase does not read shell profiles: set `JAVA_HOME` in the "Compile Kotlin Framework" script.
 - The wizard's Xcode project has deployment target 18.2 (the target is iOS 17).

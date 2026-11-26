@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!--
+        Plain HTTP is allowed because Frigate on a home network is often reached that way (port 5000) and the
+        server address is only known at run time. The server form warns before a password is sent unencrypted.
+    -->
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration" />
+</network-security-config>

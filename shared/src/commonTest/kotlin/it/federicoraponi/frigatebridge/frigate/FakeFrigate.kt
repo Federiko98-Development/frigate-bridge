@@ -1,0 +1,110 @@
+package it.federicoraponi.frigatebridge.frigate
+
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.HttpResponseData
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import kotlinx.coroutines.delay
+
+/** An in-memory Frigate server that behaves like 0.18 for login and the endpoints the app reads. */
+class FakeFrigate(
+    var username: String = "viewer",
+    var password: String = "correct-password",
+    var version: String = "0.18.3-abc1234",
+    var config: String = SAMPLE_CONFIG,
+    var allowedCameras: List<String> = listOf("front_door", "garden", "garage"),
+    var authEnabled: Boolean = true,
+    var cookieName: String = "frigate_token",
+) {
+    var online = true
+    var loginStatus: HttpStatusCode? = null
+    var responseDelayMillis = 0L
+    var loginCount = 0
+        private set
+    val requests = mutableListOf<HttpRequestData>()
+    var lastLoginBody = ""
+        private set
+
+    private var validToken: String? = null
+
+    /** Makes every issued token invalid, as when it expires after 24 hours. */
+    fun expireSession() {
+        validToken = null
+    }
+
+    fun client(): HttpClient = HttpClient(MockEngine { request -> handle(request) })
+
+    suspend fun MockRequestHandleScope.handle(request: HttpRequestData): HttpResponseData {
+        delay(responseDelayMillis)
+        if (!online) throw RuntimeException("connection refused")
+        requests += request
+        val path = request.url.encodedPath.substringAfter("/api/")
+        if (path == "login" && request.method == HttpMethod.Post) return login(request)
+        val authorized =
+            !authEnabled ||
+                (validToken != null && request.headers[HttpHeaders.Authorization] == "Bearer $validToken")
+        if (!authorized) return respond("", HttpStatusCode.Unauthorized)
+        return when (path) {
+            "version" -> respond(version)
+            "profile" -> {
+                val cameras = allowedCameras.joinToString(",") { "\"$it\"" }
+                respond("""{"username":"$username","role":"admin","allowed_cameras":[$cameras]}""")
+            }
+            "config" -> respond(config)
+            "stats" -> respond("""{"service":{"uptime":120,"version":"$version"},"cameras":{}}""")
+            "profiles" -> respond("""{"profiles":[],"active_profile":null,"last_activated":{}}""")
+            else -> respond("", HttpStatusCode.NotFound)
+        }
+    }
+
+    private suspend fun MockRequestHandleScope.login(request: HttpRequestData): HttpResponseData {
+        loginCount++
+        lastLoginBody = request.body.toByteArray().decodeToString()
+        loginStatus?.let { return respond("", it) }
+        if (!authEnabled) return respond("""{"message":"Authentication is disabled"}""", HttpStatusCode.NotFound)
+        val expected = """{"user":"$username","password":"$password"}"""
+        if (lastLoginBody != expected) return respond("""{"message":"Login failed"}""", HttpStatusCode.Unauthorized)
+        val token = "header.payload$loginCount.signature"
+        validToken = token
+        return respond(
+            "",
+            HttpStatusCode.OK,
+            headersOf(HttpHeaders.SetCookie, "$cookieName=$token; HttpOnly; Max-Age=86400; Path=/; SameSite=lax"),
+        )
+    }
+
+    companion object {
+        val SAMPLE_CONFIG =
+            """
+            {
+              "mqtt": {"enabled": false},
+              "cameras": {
+                "garage": {"enabled": false, "ui": {"order": 2, "dashboard": true}},
+                "front_door": {"friendly_name": "Front door", "enabled": true, "ui": {"order": 1}},
+                "garden": {"friendly_name": null, "ui": {"order": 1, "dashboard": false}}
+              },
+              "camera_groups": {
+                "Outside": {"cameras": "garden,front_door", "icon": "tree", "order": 2},
+                "Indoor": {"cameras": ["garage"], "order": 1}
+              }
+            }
+            """.trimIndent()
+    }
+}
+
+class InMemoryTokenStore(
+    var token: String? = null,
+) : TokenStore {
+    override suspend fun read(): String? = token
+
+    override suspend fun write(token: String?) {
+        this.token = token
+    }
+}

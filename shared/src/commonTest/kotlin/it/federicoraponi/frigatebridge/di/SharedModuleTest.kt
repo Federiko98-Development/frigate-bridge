@@ -1,28 +1,47 @@
 package it.federicoraponi.frigatebridge.di
 
-import it.federicoraponi.frigatebridge.Platform
-import it.federicoraponi.frigatebridge.startup.StartupViewModel
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import it.federicoraponi.frigatebridge.server.FakeNetwork
+import it.federicoraponi.frigatebridge.server.FakeSecretStore
+import it.federicoraponi.frigatebridge.server.HttpClientFactory
+import it.federicoraponi.frigatebridge.server.SecretStore
+import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.ServerFormArgs
+import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
+import it.federicoraponi.frigatebridge.ui.ServerListViewModel
+import it.federicoraponi.frigatebridge.ui.StartViewModel
+import it.federicoraponi.frigatebridge.ui.ViewModelTest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import kotlin.test.Test
-import kotlin.test.assertEquals
 
-class SharedModuleTest {
+private class UnusedDataStore : DataStore<Preferences> {
+    override val data: Flow<Preferences> = emptyFlow()
+
+    override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences = error("not used")
+}
+
+class SharedModuleTest : ViewModelTest() {
     @Test
-    fun resolvesTheStartupViewModel() {
+    fun resolvesEveryViewModel() {
         val fakePlatform =
             module {
-                single<Platform> {
-                    object : Platform {
-                        override val name = "Test OS"
-                    }
-                }
+                single<HttpClientFactory> { FakeNetwork() }
+                single<SecretStore> { FakeSecretStore() }
+                single<DataStore<Preferences>> { UnusedDataStore() }
             }
         val application = koinApplication { modules(sharedModule, fakePlatform) }
+        val koin = application.koin
 
-        val viewModel = application.koin.get<StartupViewModel>()
+        koin.get<ServerFormViewModel> { parametersOf(ServerFormArgs()) }
+        koin.get<StartViewModel>()
+        koin.get<ServerListViewModel>()
+        koin.get<CamerasViewModel>()
 
-        assertEquals("Test OS", viewModel.state.value.platformName)
         application.close()
     }
 }

@@ -4,7 +4,14 @@ An unofficial mobile client for [Frigate](https://frigate.video) 0.18+ servers, 
 Logic is shared in `shared`; the interface is native, in `androidApp` (Jetpack Compose, Material 3 Expressive).
 The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 
-> Early stage: the project skeleton is in place, and no Frigate features are implemented yet.
+> Early stage. Video (live view and recordings), events and notifications are not implemented yet.
+
+## What works
+
+- Several Frigate servers, kept apart, with a default one and quick switching
+- Sign-in with automatic renewal of the session, and a local plus an alternative address per server
+- Self-signed certificates, accepted once per server after checking the fingerprint
+- Cameras and camera groups of the selected server
 
 ## Requirements
 
