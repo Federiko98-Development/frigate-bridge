@@ -3,6 +3,8 @@ package it.federicoraponi.frigatebridge.server
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import it.federicoraponi.frigatebridge.frigate.FakeFrigate
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
+import it.federicoraponi.frigatebridge.network.NetworkStatus
 import it.federicoraponi.frigatebridge.settings.AppSettings
 import it.federicoraponi.frigatebridge.settings.SettingsStore
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +68,11 @@ private class FakeCertificateRejection(
 ) : RuntimeException(),
     it.federicoraponi.frigatebridge.frigate.CertificateRejection
 
+/** A connection that the test drives. */
+class FakeNetworkMonitor : NetworkMonitor {
+    override val status = MutableStateFlow(NetworkStatus(isOnline = true, id = 1))
+}
+
 /** The registry with a home and an office server, as in the app's main scenario. */
 class Fixture {
     val home = FakeFrigate()
@@ -82,6 +89,7 @@ class Fixture {
     val sessions = ServerSessionFactory(network, secrets)
     val registry = ServerRegistry(store, secrets, sessions)
     val settings = MemorySettingsStore()
+    val monitor = FakeNetworkMonitor()
 
     val homeServer = Server("home", "Home", "https://home.example.com", username = "viewer")
     val officeServer = Server("office", "Office", "https://office.example.com", username = "boss")

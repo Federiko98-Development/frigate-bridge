@@ -2,7 +2,9 @@ package it.federicoraponi.frigatebridge.di
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
 import it.federicoraponi.frigatebridge.server.FakeNetwork
+import it.federicoraponi.frigatebridge.server.FakeNetworkMonitor
 import it.federicoraponi.frigatebridge.server.FakeSecretStore
 import it.federicoraponi.frigatebridge.server.HttpClientFactory
 import it.federicoraponi.frigatebridge.server.SecretStore
@@ -31,6 +33,7 @@ class SharedModuleTest : ViewModelTest() {
         val fakePlatform =
             module {
                 single<HttpClientFactory> { FakeNetwork() }
+                single<NetworkMonitor> { FakeNetworkMonitor() }
                 single<SecretStore> { FakeSecretStore() }
                 single<DataStore<Preferences>> { UnusedDataStore() }
             }

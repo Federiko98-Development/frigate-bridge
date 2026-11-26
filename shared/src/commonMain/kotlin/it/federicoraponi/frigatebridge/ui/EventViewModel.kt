@@ -3,6 +3,8 @@ package it.federicoraponi.frigatebridge.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.frigate.FrigateError
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
+import it.federicoraponi.frigatebridge.network.connections
 import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.ServerRegistry
@@ -11,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -31,12 +34,15 @@ data class EventState(
     val export: ExportState = ExportState.None,
     /** The server does not exist any more: go back. */
     val isGone: Boolean = false,
+    /** The phone has no network. */
+    val isOffline: Boolean = false,
 )
 
 /** One review moment: what was seen, and its video. */
 class EventViewModel(
     private val args: EventArgs,
     private val registry: ServerRegistry,
+    private val network: NetworkMonitor,
 ) : ViewModel() {
     private var loadJob: Job? = null
     private var exportJob: Job? = null
@@ -46,6 +52,16 @@ class EventViewModel(
 
     init {
         load()
+        viewModelScope.launch {
+            network.status.collect { status -> mutableState.update { it.copy(isOffline = !status.isOnline) } }
+        }
+        viewModelScope.launch {
+            // On a new network the video is asked for again, perhaps on the server's other address.
+            network.status.connections().drop(1).collect {
+                registry.session(args.serverId)?.refresh()
+                load()
+            }
+        }
     }
 
     fun retry() = load()

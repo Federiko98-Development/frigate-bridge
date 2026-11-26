@@ -60,6 +60,7 @@ internal fun Failure(
     failure: VideoFailure,
     fallback: Int,
     onRetry: () -> Unit,
+    isOffline: Boolean = false,
 ) {
     Column(
         modifier = Modifier.verticalScroll(rememberScrollState()).padding(Spacing.sm),
@@ -67,8 +68,14 @@ internal fun Failure(
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
         val problem = failure.problem
-        OverVideo(if (problem != null) problemText(problem) else stringResource(fallback))
-        failure.detail?.let {
+        val text =
+            when {
+                isOffline -> stringResource(R.string.offline_title)
+                problem != null -> problemText(problem)
+                else -> stringResource(fallback)
+            }
+        OverVideo(text)
+        failure.detail?.takeUnless { isOffline }?.let {
             Text(it, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 3)
         }
         PrimaryButton(text = stringResource(R.string.retry), onClick = onRetry)

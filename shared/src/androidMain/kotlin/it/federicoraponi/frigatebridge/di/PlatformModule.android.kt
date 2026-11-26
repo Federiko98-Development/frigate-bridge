@@ -1,6 +1,8 @@
 package it.federicoraponi.frigatebridge.di
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import it.federicoraponi.frigatebridge.network.AndroidNetworkMonitor
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
 import it.federicoraponi.frigatebridge.server.AndroidHttpClientFactory
 import it.federicoraponi.frigatebridge.server.HttpClientFactory
 import it.federicoraponi.frigatebridge.server.KeystoreSecretStore
@@ -13,6 +15,7 @@ import org.koin.dsl.module
 internal actual val platformModule: Module =
     module {
         single<HttpClientFactory> { AndroidHttpClientFactory() }
+        single<NetworkMonitor> { AndroidNetworkMonitor(androidContext()) }
         single<SecretStore> { KeystoreSecretStore(androidContext()) }
         single {
             val context = androidContext()

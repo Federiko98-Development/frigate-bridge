@@ -15,7 +15,7 @@ class EventViewModelTest : ViewModelTest() {
     fun playsTheMomentWithALittleBeforeAndAfterIt() =
         runTest {
             fixture.saveBoth()
-            val viewModel = EventViewModel(EventArgs("home", "moment"), fixture.registry)
+            val viewModel = EventViewModel(EventArgs("home", "moment"), fixture.registry, fixture.monitor)
 
             val state = viewModel.state.first { it.playback is PlaybackState.Ready }
 
@@ -30,7 +30,7 @@ class EventViewModelTest : ViewModelTest() {
     fun reportsAMomentTheServerNoLongerHas() =
         runTest {
             fixture.saveBoth()
-            val viewModel = EventViewModel(EventArgs("home", "gone"), fixture.registry)
+            val viewModel = EventViewModel(EventArgs("home", "gone"), fixture.registry, fixture.monitor)
 
             val state = viewModel.state.first { it.playback is PlaybackState.Failed }
 

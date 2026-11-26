@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.camera.Camera
 import it.federicoraponi.frigatebridge.frigate.FrigateError
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
+import it.federicoraponi.frigatebridge.network.connections
 import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.server.ConnectionState
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -48,11 +51,14 @@ data class EventsState(
     val problem: ConnectionProblem? = null,
     /** There is no active server: go back to the list. */
     val hasNoServer: Boolean = false,
+    /** The phone has no network. */
+    val isOffline: Boolean = false,
 )
 
 /** The moments Frigate marked for review on the active server. */
 class EventsViewModel(
     private val registry: ServerRegistry,
+    private val network: NetworkMonitor,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(EventsState())
     val state: StateFlow<EventsState> = mutableState.asStateFlow()
@@ -67,6 +73,15 @@ class EventsViewModel(
                 .distinctUntilChanged()
                 .collectLatest { active -> if (active != null) show(active) }
         }
+        viewModelScope.launch {
+            network.status.collect { status -> mutableState.update { it.copy(isOffline = !status.isOnline) } }
+        }
+        viewModelScope.launch {
+            // The first connection is the one the list is loaded on anyway.
+            network.status.connections().drop(1).collect {
+                if (mutableState.value.problem != null) load(first = true)
+            }
+        }
     }
 
     fun setSeverity(severity: ReviewSeverity) = applyFilter { it.copy(severity = severity) }
@@ -78,7 +93,14 @@ class EventsViewModel(
     fun refresh() {
         if (mutableState.value.isRefreshing) return
         mutableState.update { it.copy(isRefreshing = true) }
-        load(first = true)
+        if (mutableState.value.isOffline) {
+            viewModelScope.launch {
+                visibleRefresh {}
+                mutableState.update { it.copy(isRefreshing = false) }
+            }
+        } else {
+            load(first = true)
+        }
     }
 
     /** Reads the older moments that follow the ones shown. */
@@ -150,7 +172,7 @@ class EventsViewModel(
         val changed = mutableState.value.server?.id != active.summary.id
         mutableState.update {
             // Filters and lists belong to one server.
-            val base = if (changed) EventsState() else it
+            val base = if (changed) EventsState(isOffline = it.isOffline) else it
             base.copy(server = active.summary, servers = active.servers, hasNoServer = false)
         }
         load(first = true)
@@ -175,8 +197,12 @@ class EventsViewModel(
                 val shown = mutableState.value.items
                 val before =
                     if (first) Clock.System.now().epochSeconds + 1 else shown.lastOrNull()?.start ?: return@launch
+                // After a failure, or when the user asks, the server is read again: it may answer elsewhere.
+                val current = mutableState.value
+                val reread = !current.isOffline && (current.isRefreshing || current.problem != null)
                 try {
-                    val connection = session.state.value as? ConnectionState.Connected ?: session.refresh()
+                    val known = (session.state.value as? ConnectionState.Connected).takeUnless { reread }
+                    val connection = known ?: session.refresh()
                     val cameras =
                         (connection as? ConnectionState.Connected)
                             ?.snapshot

@@ -6,6 +6,8 @@ import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.camera.LiveStream
 import it.federicoraponi.frigatebridge.frigate.FrigateError
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
+import it.federicoraponi.frigatebridge.network.connections
 import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.HttpsLiveStream
 import it.federicoraponi.frigatebridge.server.ServerRegistry
@@ -16,6 +18,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -76,12 +79,15 @@ data class CameraState(
     val ptz: PtzControls? = null,
     /** The server or the camera does not exist any more: go back. */
     val isGone: Boolean = false,
+    /** The phone has no network. */
+    val isOffline: Boolean = false,
 )
 
 /** Live view and controls of one camera. */
 class CameraViewModel(
     args: CameraArgs,
     private val registry: ServerRegistry,
+    private val network: NetworkMonitor,
 ) : ViewModel() {
     private val camera = args.camera
     private var liveJob: Job? = null
@@ -99,6 +105,16 @@ class CameraViewModel(
 
     init {
         loadCamera()
+        viewModelScope.launch {
+            network.status.collect { status -> mutableState.update { it.copy(isOffline = !status.isOnline) } }
+        }
+        viewModelScope.launch {
+            // The first connection is the one the camera is loaded on anyway.
+            network.status
+                .connections()
+                .drop(1)
+                .collect { reconnect() }
+        }
         viewModelScope.launch {
             for (command in ptzCommands) {
                 try {
@@ -255,6 +271,14 @@ class CameraViewModel(
             current.streams.isEmpty() -> loadCamera()
             current.mode == VideoMode.Live -> startLive()
         }
+    }
+
+    /** The live view does not survive a change of network, and the server may answer on another address. */
+    private suspend fun reconnect() {
+        val current = mutableState.value
+        if (current.mode != VideoMode.Live && current.streams.isNotEmpty()) return
+        session()?.refresh()
+        retry()
     }
 
     private fun startLive() {

@@ -179,4 +179,6 @@
     <string name="event_zones">Zones</string>
     <string name="event_alert">Alert</string>
     <string name="event_detection">Detection</string>
+    <string name="offline_title">No network connection</string>
+    <string name="offline_message">The app reconnects as soon as the phone is online.</string>
 </resources>

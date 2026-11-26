@@ -76,6 +76,8 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   with a menu open.
 - Android 17 (target 37) blocks the local network until `ACCESS_LOCAL_NETWORK` is granted; connections time
   out without it.
+- `NetworkMonitor` follows the default network (one without internet counts): on a new one the server is read
+  again, which also picks between its two addresses; offline, screens keep what they show and say so.
 - Plain HTTP is allowed on purpose (Frigate on a home network); the server form warns about it.
 - Passwords and tokens are encrypted with an Android Keystore key; backups and device transfer are disabled.
 
@@ -151,6 +153,6 @@ which is where SKIE runs, does need it):
   `SharedViewModelStore` and calls `clear()` on destruction; `startSharedKoin()` at launch.
 - Linking the framework and SKIE have not been tried yet: verify them first.
 - Not implemented on iOS yet: Keychain storage (`MemorySecretStore` loses passwords when the app closes),
-  accepting a self-signed certificate, and the local network usage description in `Info.plist`.
+  accepting a self-signed certificate, following the network (`NWPathMonitor`), and the local network usage description in `Info.plist`.
 - The Xcode build phase does not read shell profiles: set `JAVA_HOME` in the "Compile Kotlin Framework" script.
 - The wizard's Xcode project has deployment target 18.2 (the target is iOS 17).

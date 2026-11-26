@@ -34,9 +34,9 @@ val sharedModule =
         viewModelOf(::SettingsViewModel)
         viewModelOf(::EventsViewModel)
         viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
-        viewModel { parameters -> CameraViewModel(parameters.get(), get()) }
-        viewModel { parameters -> TimelineViewModel(parameters.get(), get()) }
-        viewModel { parameters -> EventViewModel(parameters.get(), get()) }
+        viewModel { parameters -> CameraViewModel(parameters.get(), get(), get()) }
+        viewModel { parameters -> TimelineViewModel(parameters.get(), get(), get()) }
+        viewModel { parameters -> EventViewModel(parameters.get(), get(), get()) }
     }
 
 /** Starts Koin. Call it once, when the app launches. */

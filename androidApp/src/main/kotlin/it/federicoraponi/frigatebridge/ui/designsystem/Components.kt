@@ -91,6 +91,16 @@ fun ServerBadge(
     }
 }
 
+/** Said above content that is no longer being updated. */
+@Composable
+fun OfflineNotice(modifier: Modifier = Modifier) {
+    NoticeCard(
+        title = stringResource(R.string.offline_title),
+        message = stringResource(R.string.offline_message),
+        modifier = modifier,
+    )
+}
+
 /** An icon centred in an Expressive polygon. */
 @Composable
 fun ShapedIcon(
@@ -260,6 +270,13 @@ fun LocalNetworkNotice(
         modifier = modifier,
     )
 }
+
+/** Why a server cannot be used: without a network, that says more than whatever failed because of it. */
+@Composable
+fun unavailableText(
+    problem: ConnectionProblem,
+    isOffline: Boolean,
+): String = if (isOffline) stringResource(R.string.offline_title) else problemText(problem)
 
 @Composable
 fun problemText(problem: ConnectionProblem): String =

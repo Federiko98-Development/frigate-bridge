@@ -66,11 +66,12 @@ import it.federicoraponi.frigatebridge.ui.designsystem.LocalNetworkNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.MenuEntry
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
+import it.federicoraponi.frigatebridge.ui.designsystem.OfflineNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.designsystem.unavailableText
 import it.federicoraponi.frigatebridge.ui.rememberAllowLocalNetwork
 import it.federicoraponi.frigatebridge.ui.rememberLocalNetworkAccess
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
@@ -109,7 +110,9 @@ fun CamerasRoute(
         state = state,
         bottomBar = bottomBar,
         localNetworkBlocked =
-            !localNetwork.isGranted && state.content == CamerasContent.Failed(ConnectionProblem.Unreachable),
+            !state.isOffline &&
+                !localNetwork.isGranted &&
+                state.content == CamerasContent.Failed(ConnectionProblem.Unreachable),
         actions =
             CamerasActions(
                 showServers = onShowServers,
@@ -156,13 +159,17 @@ fun CamerasScreen(
             if (localNetworkBlocked) {
                 LocalNetworkNotice(actions.allowLocalNetwork, Modifier.padding(Spacing.lg))
             }
+            if (state.isOffline && state.content is CamerasContent.Ready) {
+                OfflineNotice(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm))
+            }
             RefreshableContent(isRefreshing = state.isRefreshing, onRefresh = actions.retry) {
                 when (val content = state.content) {
                     CamerasContent.Loading, CamerasContent.NoServer -> LoadingContent()
                     is CamerasContent.Failed ->
                         MessageState(
                             icon = Icons.Filled.Warning,
-                            title = problemText(content.problem),
+                            title = unavailableText(content.problem, state.isOffline),
+                            message = if (state.isOffline) stringResource(R.string.offline_message) else null,
                             isError = true,
                         ) {
                             PrimaryButton(text = stringResource(R.string.retry), onClick = actions.retry)

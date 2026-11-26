@@ -1,6 +1,7 @@
 package it.federicoraponi.frigatebridge.ui.recordings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -33,11 +34,12 @@ import it.federicoraponi.frigatebridge.ui.cameras.CamerasActions
 import it.federicoraponi.frigatebridge.ui.cameras.ServerSwitcher
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
+import it.federicoraponi.frigatebridge.ui.designsystem.OfflineNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ShapedIcon
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.designsystem.unavailableText
 import org.koin.androidx.compose.koinViewModel
 
 /** The recordings of the active server, camera by camera. */
@@ -89,12 +91,19 @@ fun RecordingsScreen(
                 is CamerasContent.Failed ->
                     MessageState(
                         icon = Icons.Filled.Warning,
-                        title = problemText(cameras.problem),
+                        title = unavailableText(cameras.problem, state.isOffline),
+                        message = if (state.isOffline) stringResource(R.string.offline_message) else null,
                         isError = true,
                     ) {
                         PrimaryButton(text = stringResource(R.string.retry), onClick = actions.retry)
                     }
-                is CamerasContent.Ready -> CameraRecordings(cameras.cameras, actions.openCamera)
+                is CamerasContent.Ready ->
+                    Column {
+                        if (state.isOffline) {
+                            OfflineNotice(Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm))
+                        }
+                        CameraRecordings(cameras.cameras, actions.openCamera)
+                    }
             }
         }
     }

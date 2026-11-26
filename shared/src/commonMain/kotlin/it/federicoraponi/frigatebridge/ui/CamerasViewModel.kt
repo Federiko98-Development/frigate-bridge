@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.camera.Camera
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.frigate.FrigateError
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
+import it.federicoraponi.frigatebridge.network.connections
 import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.RegistryState
 import it.federicoraponi.frigatebridge.server.Server
@@ -63,16 +65,21 @@ data class CamerasState(
     val isRefreshing: Boolean = false,
     /** Grows after every refresh, so that the pictures are loaded again too. */
     val reloads: Int = 0,
+    /** The phone has no network: what is on screen stays as it was. */
+    val isOffline: Boolean = false,
 )
 
 /** The cameras of the active server, and only of that one. */
 class CamerasViewModel(
     private val registry: ServerRegistry,
     private val settingsStore: SettingsStore,
+    private val network: NetworkMonitor,
 ) : ViewModel() {
     private val selectedGroup = MutableStateFlow<GroupSelection?>(null)
 
     private val refresh = MutableStateFlow(RefreshProgress())
+
+    private val offline = MutableStateFlow(false)
 
     // Kept so that the grid is not empty when the user comes back to it.
     private val previews = mutableMapOf<CameraRef, ByteArray>()
@@ -83,18 +90,25 @@ class CamerasViewModel(
             registry.state.flatMapLatest { activeServer(it) },
             settingsStore.settings,
             refresh,
-        ) { cameras, settings, progress ->
-            cameras.copy(settings = settings, isRefreshing = progress.running, reloads = progress.done)
+            offline,
+        ) { cameras, settings, progress, isOffline ->
+            cameras.copy(
+                settings = settings,
+                isRefreshing = progress.running,
+                reloads = progress.done,
+                isOffline = isOffline,
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), CamerasState())
 
     init {
+        viewModelScope.launch { network.status.collect { offline.value = !it.isOnline } }
         viewModelScope.launch {
             registry.load()
-            registry.state
-                .map { it?.activeServerId to it?.revision }
-                .distinctUntilChanged()
+            val servers = registry.state.map { it?.activeServerId to it?.revision }.distinctUntilChanged()
+            // On a new network the server is read again: it may answer on its other address.
+            combine(servers, network.status.connections()) { server, connection -> server to connection }
                 // Switching server abandons the request to the previous one.
-                .collectLatest { (serverId, _) -> serverId?.let { registry.session(it)?.refresh() } }
+                .collectLatest { (server, _) -> server.first?.let { registry.session(it)?.refresh() } }
         }
     }
 
@@ -122,7 +136,8 @@ class CamerasViewModel(
         refresh.update { it.copy(running = true) }
         viewModelScope.launch {
             try {
-                visibleRefresh { registry.session(serverId)?.refresh() }
+                // Without a network, reading the server would only replace the cameras with an error.
+                visibleRefresh { if (!offline.value) registry.session(serverId)?.refresh() }
                 refresh.update { it.copy(done = it.done + 1) }
             } finally {
                 refresh.update { it.copy(running = false) }
@@ -135,6 +150,7 @@ class CamerasViewModel(
 
     /** A current low-resolution JPEG of [camera], or `null` if it cannot be read right now. */
     suspend fun loadPreview(camera: CameraRef): ByteArray? {
+        if (offline.value) return null
         val session = registry.session(camera.serverId) ?: return null
         return try {
             session.latestFrame(camera.cameraName, PREVIEW_HEIGHT).also { previews[camera] = it }

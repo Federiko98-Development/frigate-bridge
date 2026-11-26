@@ -255,7 +255,8 @@ private fun Video(
                 }
                 when (live) {
                     LiveState.Connecting -> ContainedLoadingIndicator()
-                    is LiveState.Failed -> Failure(live.failure, R.string.video_failed, viewModel::retry)
+                    is LiveState.Failed ->
+                        Failure(live.failure, R.string.video_failed, viewModel::retry, state.isOffline)
                     LiveState.Playing -> Unit
                 }
             }
@@ -265,7 +266,7 @@ private fun Video(
                         content.player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
                     PlaybackState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
                     is PlaybackState.Failed ->
-                        Failure(playback.failure, R.string.video_failed, content.onRetryRecording)
+                        Failure(playback.failure, R.string.video_failed, content.onRetryRecording, state.isOffline)
                     PlaybackState.Loading, null -> ContainedLoadingIndicator()
                 }
         }

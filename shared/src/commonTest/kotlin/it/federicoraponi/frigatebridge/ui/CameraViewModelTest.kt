@@ -23,7 +23,7 @@ class CameraViewModelTest : ViewModelTest() {
 
     private suspend fun frontDoor(): CameraViewModel {
         fixture.saveBoth()
-        val viewModel = CameraViewModel(CameraArgs(CameraRef("home", "front_door")), fixture.registry)
+        val viewModel = CameraViewModel(CameraArgs(CameraRef("home", "front_door")), fixture.registry, fixture.monitor)
         viewModel.state.first { it.streams.isNotEmpty() }
         return viewModel
     }

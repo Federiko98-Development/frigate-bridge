@@ -1,5 +1,6 @@
 package it.federicoraponi.frigatebridge.ui
 
+import it.federicoraponi.frigatebridge.network.NetworkStatus
 import it.federicoraponi.frigatebridge.server.Fixture
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -19,7 +20,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
             assertEquals(listOf("front_door", "garage"), viewModel.cameras("home").names())
 
             viewModel.switchTo("office")
@@ -35,7 +36,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
             viewModel.cameras("home")
 
             viewModel.selectGroup("Outside")
@@ -52,7 +53,7 @@ class CamerasViewModelTest : ViewModelTest() {
             fixture.saveBoth()
             fixture.registry.activate("home")
             fixture.home.online = false
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
             val failed = viewModel.state.first { it.content is CamerasContent.Failed }
             assertEquals(CamerasContent.Failed(ConnectionProblem.Unreachable), failed.content)
 
@@ -63,11 +64,30 @@ class CamerasViewModelTest : ViewModelTest() {
         }
 
     @Test
+    fun keepsTheCamerasWhileOfflineAndReadsTheServerAgainOnReturn() =
+        runTest {
+            fixture.saveBoth()
+            fixture.registry.activate("home")
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            viewModel.cameras("home")
+
+            fixture.monitor.status.value = NetworkStatus(isOnline = false)
+            val offline = viewModel.state.first { it.isOffline }
+            assertEquals(listOf("front_door", "garage"), offline.names())
+
+            fixture.home.config = """{"cameras": {"porch": {}}}"""
+            fixture.home.allowedCameras = listOf("porch")
+            fixture.monitor.status.value = NetworkStatus(isOnline = true, id = 2)
+
+            viewModel.state.first { it.content is CamerasContent.Ready && it.names() == listOf("porch") }
+        }
+
+    @Test
     fun reportsThatTheActiveServerWasDeleted() =
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
             viewModel.cameras("home")
 
             fixture.registry.remove("home")

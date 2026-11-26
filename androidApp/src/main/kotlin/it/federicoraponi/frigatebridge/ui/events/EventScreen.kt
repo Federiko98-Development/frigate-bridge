@@ -63,6 +63,7 @@ import it.federicoraponi.frigatebridge.ui.camera.SkipButton
 import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
 import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.recordings.ExportSection
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
@@ -111,11 +112,11 @@ fun EventRoute(
     // The video moves between the page and full screen without being rebuilt, so it keeps playing.
     val video =
         remember {
-            movableContentOf { playback: PlaybackState, current: Player?, retry: () -> Unit ->
-                EventVideo(playback, current, retry)
+            movableContentOf { shown: EventState, current: Player?, retry: () -> Unit ->
+                EventVideo(shown, current, retry)
             }
         }
-    val picture: @Composable () -> Unit = { video(state.playback, player, viewModel::retry) }
+    val picture: @Composable () -> Unit = { video(state, player, viewModel::retry) }
     if (fullscreen) {
         BackHandler { fullscreen = false }
         LandscapeFullscreen()
@@ -148,9 +149,7 @@ private fun EventScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(state.cameraName, style = MaterialTheme.typography.titleLargeEmphasized, maxLines = 1)
-                },
+                title = { ScreenTitle(state.cameraName) },
                 navigationIcon = {
                     IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
                         Icon(
@@ -206,14 +205,15 @@ private fun Player.seekBy(seconds: Int) = seekTo((currentPosition + seconds * 1_
 
 @Composable
 private fun EventVideo(
-    playback: PlaybackState,
+    state: EventState,
     player: Player?,
     onRetry: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        when (playback) {
+        when (val playback = state.playback) {
             is PlaybackState.Ready -> player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
-            is PlaybackState.Failed -> Failure(playback.failure, R.string.video_failed, onRetry)
+            is PlaybackState.Failed ->
+                Failure(playback.failure, R.string.video_failed, onRetry, state.isOffline)
             PlaybackState.Loading, PlaybackState.Empty -> ContainedLoadingIndicator()
         }
     }

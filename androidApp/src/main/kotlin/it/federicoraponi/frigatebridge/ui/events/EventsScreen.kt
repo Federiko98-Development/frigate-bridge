@@ -55,6 +55,7 @@ import it.federicoraponi.frigatebridge.ui.cameras.ServerSwitcher
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
+import it.federicoraponi.frigatebridge.ui.designsystem.OfflineNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
@@ -134,7 +135,8 @@ private fun EventList(
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
         item(key = "filters") { Filters(state, viewModel) }
-        state.problem?.let { problem ->
+        if (state.isOffline) item(key = "offline") { OfflineNotice() }
+        state.problem?.takeUnless { state.isOffline }?.let { problem ->
             item(key = "problem") {
                 NoticeCard(
                     message = problemText(problem),
@@ -145,7 +147,7 @@ private fun EventList(
         }
         if (state.isLoading) {
             item(key = "loading") { Waiting() }
-        } else if (state.items.isEmpty() && state.problem == null) {
+        } else if (state.items.isEmpty() && state.problem == null && !state.isOffline) {
             item(key = "empty") {
                 MessageState(
                     icon = Icons.Filled.Notifications,

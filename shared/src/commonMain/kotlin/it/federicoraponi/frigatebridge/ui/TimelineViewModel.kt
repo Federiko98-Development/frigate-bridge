@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.frigate.FrigateError
+import it.federicoraponi.frigatebridge.network.NetworkMonitor
+import it.federicoraponi.frigatebridge.network.connections
 import it.federicoraponi.frigatebridge.recordings.PlaybackWindow
 import it.federicoraponi.frigatebridge.recordings.RecordingDay
 import it.federicoraponi.frigatebridge.recordings.RecordingSegment
@@ -17,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -69,6 +72,7 @@ data class TimelineState(
 class TimelineViewModel(
     private val args: TimelineArgs,
     private val registry: ServerRegistry,
+    private val network: NetworkMonitor,
 ) : ViewModel() {
     private val camera = args.camera
     private var segments: List<RecordingSegment> = emptyList()
@@ -82,6 +86,13 @@ class TimelineViewModel(
 
     init {
         load()
+        viewModelScope.launch {
+            // On a new network the video is asked for again, perhaps on the server's other address.
+            network.status.connections().drop(1).collect {
+                session()?.refresh()
+                retry()
+            }
+        }
     }
 
     fun retry() {

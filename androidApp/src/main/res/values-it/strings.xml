@@ -178,4 +178,6 @@
     <string name="event_zones">Zone</string>
     <string name="event_alert">Allarme</string>
     <string name="event_detection">Rilevamento</string>
+    <string name="offline_title">Nessuna connessione di rete</string>
+    <string name="offline_message">L\'app si ricollega appena il telefono torna in rete.</string>
 </resources>
