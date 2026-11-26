@@ -30,7 +30,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecureTextField
@@ -41,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.toShape
@@ -79,6 +79,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.LocalNetworkNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.ShapedIcon
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
@@ -150,13 +151,13 @@ fun ServerFormScreen(
     modifier: Modifier = Modifier,
     localNetworkBlocked: Boolean = false,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             val title = if (state.isEditing) R.string.server_edit else R.string.server_add
-            MediumFlexibleTopAppBar(
-                title = { Text(stringResource(title)) },
+            TopAppBar(
+                title = { ScreenTitle(stringResource(title)) },
                 navigationIcon = {
                     IconButton(onClick = actions.close, shapes = IconButtonDefaults.shapes()) {
                         Icon(
@@ -177,7 +178,7 @@ fun ServerFormScreen(
                     .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
             ServerPreviewCard(state)
             ServerFields(state, actions)
@@ -197,27 +198,27 @@ fun ServerFormScreen(
 private fun ServerPreviewCard(state: ServerFormState) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraExtraLarge,
+        shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Row(
-            modifier = Modifier.padding(Spacing.xl),
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
             val name = state.name.ifBlank { stringResource(R.string.server_new) }
-            ServerBadge(name, state.colorIndex, size = 72.dp)
+            ServerBadge(name, state.colorIndex, size = 48.dp)
             Column {
                 Text(
                     name,
-                    style = MaterialTheme.typography.headlineSmallEmphasized,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     state.url.ifBlank { stringResource(R.string.form_url_example) },
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -387,7 +388,7 @@ private fun ColorPicker(
             color = MaterialTheme.colorScheme.surfaceContainer,
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().selectableGroup().padding(Spacing.md),
+                modifier = Modifier.fillMaxWidth().selectableGroup().padding(Spacing.sm),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 serverColors.forEachIndexed { index, color ->
@@ -408,7 +409,7 @@ private fun ColorPicker(
                         Box(
                             modifier =
                                 Modifier
-                                    .size(if (isSelected) 48.dp else 36.dp)
+                                    .size(if (isSelected) 40.dp else 28.dp)
                                     .clip(shape)
                                     .background(color),
                             contentAlignment = Alignment.Center,
@@ -440,7 +441,7 @@ private fun SaveButtons(
             modifier = Modifier.fillMaxWidth(),
             leading =
                 if (state.isSaving) {
-                    { LoadingIndicator(modifier = Modifier.size(32.dp)) }
+                    { LoadingIndicator(modifier = Modifier.size(24.dp)) }
                 } else {
                     null
                 },
@@ -480,17 +481,21 @@ private fun CertificateSheet(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Spacing.xl)
-                    .padding(bottom = Spacing.xl),
-            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+                    .padding(bottom = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             ShapedIcon(Icons.Filled.Lock, shape = MaterialShapes.SoftBurst)
             Text(
                 stringResource(title),
-                style = MaterialTheme.typography.headlineSmallEmphasized,
+                style = MaterialTheme.typography.titleLargeEmphasized,
                 textAlign = TextAlign.Center,
             )
-            Text(stringResource(message), textAlign = TextAlign.Center)
+            Text(
+                stringResource(message),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.large,
@@ -504,7 +509,11 @@ private fun CertificateSheet(
                         stringResource(R.string.certificate_fingerprint),
                         style = MaterialTheme.typography.titleSmallEmphasized,
                     )
-                    Text(prompt.sha256Fingerprint, fontFamily = FontFamily.Monospace)
+                    Text(
+                        prompt.sha256Fingerprint,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
                 }
             }
             PrimaryButton(

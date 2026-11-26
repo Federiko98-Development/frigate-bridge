@@ -181,7 +181,7 @@ private fun ServerSwitcher(
             ServerBadge(server.name, server.colorIndex, size = 32.dp)
             Text(
                 server.name,
-                style = MaterialTheme.typography.titleMediumEmphasized,
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = Spacing.sm).weight(1f, fill = false),
@@ -262,9 +262,9 @@ private fun CameraGrid(content: CamerasContent.Ready) {
     }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 160.dp),
-        contentPadding = PaddingValues(Spacing.lg),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         content.outdatedVersion?.let { version ->
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -283,14 +283,14 @@ private fun CameraCard(
     val colors = MaterialTheme.colorScheme
     Surface(
         modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         color = colors.surfaceContainer,
     ) {
-        Column(modifier = Modifier.padding(Spacing.sm)) {
+        Column(modifier = Modifier.padding(Spacing.xs)) {
             // The live preview will take this place.
             Surface(
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.medium,
                 color = colors.surfaceContainerHighest,
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -303,15 +303,15 @@ private fun CameraCard(
                         Icon(
                             painterResource(R.drawable.ic_videocam),
                             contentDescription = null,
-                            modifier = Modifier.padding(Spacing.md).size(24.dp),
+                            modifier = Modifier.padding(Spacing.sm).size(20.dp),
                         )
                     }
                 }
             }
-            Column(modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.md)) {
+            Column(modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.sm)) {
                 Text(
                     camera.displayName,
-                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

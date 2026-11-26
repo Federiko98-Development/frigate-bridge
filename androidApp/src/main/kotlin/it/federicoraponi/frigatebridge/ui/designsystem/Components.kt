@@ -72,7 +72,7 @@ fun ServerBadge(
     name: String,
     colorIndex: Int,
     modifier: Modifier = Modifier,
-    size: Dp = 48.dp,
+    size: Dp = 40.dp,
 ) {
     Box(
         modifier =
@@ -83,13 +83,11 @@ fun ServerBadge(
                 .clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {
-        val style =
-            if (size >= 64.dp) {
-                MaterialTheme.typography.headlineMediumEmphasized
-            } else {
-                MaterialTheme.typography.titleMediumEmphasized
-            }
-        Text(name.trim().take(1).uppercase(), color = Color.White, style = style)
+        Text(
+            name.trim().take(1).uppercase(),
+            color = Color.White,
+            style = MaterialTheme.typography.titleMediumEmphasized,
+        )
     }
 }
 
@@ -99,7 +97,7 @@ fun ShapedIcon(
     icon: ImageVector,
     modifier: Modifier = Modifier,
     shape: RoundedPolygon = MaterialShapes.Cookie9Sided,
-    size: Dp = 96.dp,
+    size: Dp = 64.dp,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
 ) {
@@ -109,6 +107,16 @@ fun ShapedIcon(
     ) {
         Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(size * 0.45f))
     }
+}
+
+/** The title of a top app bar. */
+@Composable
+fun ScreenTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleLargeEmphasized,
+        modifier = Modifier.semantics { heading() },
+    )
 }
 
 /** A titled group of segmented items. */
@@ -140,7 +148,7 @@ fun NoticeCard(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
     ) {
@@ -150,8 +158,8 @@ fun NoticeCard(
         ) {
             Icon(Icons.Filled.Warning, contentDescription = null)
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                if (title != null) Text(title, style = MaterialTheme.typography.titleMediumEmphasized)
-                Text(message, style = MaterialTheme.typography.bodyMedium)
+                if (title != null) Text(title, style = MaterialTheme.typography.titleSmallEmphasized)
+                Text(message, style = MaterialTheme.typography.bodySmall)
                 if (actionLabel != null) {
                     TextButton(
                         onClick = onAction,
@@ -168,7 +176,7 @@ fun NoticeCard(
     }
 }
 
-/** The medium-sized button used for the main action of a screen. */
+/** The button used for the main action of a screen. */
 @Composable
 fun PrimaryButton(
     text: String,
@@ -177,19 +185,17 @@ fun PrimaryButton(
     enabled: Boolean = true,
     leading: @Composable (() -> Unit)? = null,
 ) {
-    val height = ButtonDefaults.MediumContainerHeight
     Button(
         onClick = onClick,
-        shapes = ButtonDefaults.shapesFor(height),
-        modifier = modifier.heightIn(min = height),
+        shapes = ButtonDefaults.shapes(),
+        modifier = modifier.heightIn(min = 48.dp),
         enabled = enabled,
-        contentPadding = ButtonDefaults.contentPaddingFor(height),
     ) {
         if (leading != null) {
             leading()
-            Box(Modifier.size(ButtonDefaults.iconSpacingFor(height)))
+            Box(Modifier.size(ButtonDefaults.IconSpacing))
         }
-        Text(text, style = ButtonDefaults.textStyleFor(height))
+        Text(text)
     }
 }
 
@@ -206,26 +212,26 @@ fun MessageState(
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.xl),
-        verticalArrangement = Arrangement.spacedBy(Spacing.lg, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ShapedIcon(
             icon = icon,
-            size = 128.dp,
+            size = 80.dp,
             shape = if (isError) MaterialShapes.SoftBurst else MaterialShapes.Cookie9Sided,
             containerColor = if (isError) colors.errorContainer else colors.primaryContainer,
             contentColor = if (isError) colors.onErrorContainer else colors.onPrimaryContainer,
         )
         Text(
             title,
-            style = MaterialTheme.typography.headlineSmallEmphasized,
+            style = MaterialTheme.typography.titleLargeEmphasized,
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() },
         )
         if (message != null) {
             Text(
                 message,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
@@ -237,7 +243,7 @@ fun MessageState(
 @Composable
 fun LoadingContent(modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        ContainedLoadingIndicator(modifier = Modifier.size(80.dp))
+        ContainedLoadingIndicator()
     }
 }
 

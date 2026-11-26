@@ -1,6 +1,10 @@
 package it.federicoraponi.frigatebridge.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,7 +42,16 @@ private data class ServerForm(
 /** Material "emphasized" easing. Springs would overshoot visibly on a full-screen slide. */
 private val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
-private fun <T> pageTween() = tween<T>(durationMillis = 400, easing = Emphasized)
+private fun <T> pageTween(easing: Easing = Emphasized) = tween<T>(durationMillis = 400, easing = easing)
+
+/** The screen underneath moves a quarter of the width and is slightly dimmed while covered. */
+private const val COVERED_ALPHA = 0.7f
+
+private fun popEnter(easing: Easing = Emphasized): EnterTransition =
+    slideInHorizontally(pageTween(easing)) { -it / 4 } +
+        fadeIn(pageTween(easing), initialAlpha = COVERED_ALPHA)
+
+private fun popExit(easing: Easing = Emphasized): ExitTransition = slideOutHorizontally(pageTween(easing)) { it }
 
 @Composable
 fun AppNavigation(viewModel: StartViewModel = koinViewModel()) {
@@ -58,13 +71,16 @@ private fun AppNavHost(destination: StartDestination) {
     NavHost(
         navController = navController,
         startDestination = start,
-        // The same slide for forward, back and the predictive back gesture.
+        // One horizontal slide for forward, back and the back gesture.
         enterTransition = { slideInHorizontally(pageTween()) { it } },
-        exitTransition = { slideOutHorizontally(pageTween()) { -it / 4 } + fadeOut(pageTween(), targetAlpha = 0.7f) },
-        popEnterTransition = {
-            slideInHorizontally(pageTween()) { -it / 4 } + fadeIn(pageTween(), initialAlpha = 0.7f)
+        exitTransition = {
+            slideOutHorizontally(pageTween()) { -it / 4 } + fadeOut(pageTween(), targetAlpha = COVERED_ALPHA)
         },
-        popExitTransition = { slideOutHorizontally(pageTween()) { it } },
+        popEnterTransition = { popEnter() },
+        popExitTransition = { popExit() },
+        // Without these the library shrinks the screen during the back gesture. Linear, so it follows the finger.
+        predictivePopEnterTransition = { popEnter(LinearEasing) },
+        predictivePopExitTransition = { popExit(LinearEasing) },
     ) {
         composable<Servers> {
             ServerListRoute(

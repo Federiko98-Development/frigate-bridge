@@ -28,6 +28,8 @@ dependencies {
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
+    // 1.1.x crashes when a menu closes while the back gesture is in progress.
+    implementation(libs.androidx.navigationevent.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.koin.android)

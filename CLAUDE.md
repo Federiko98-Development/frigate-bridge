@@ -40,8 +40,12 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Lists and form fields are segmented groups (`SegmentedListItem`, `ListItemDefaults.segmentedShapes`).
 - Buttons and icon buttons use the shape-morphing `shapes` overloads; accents use `MaterialShapes`.
 - Choices between a few options are connected `ToggleButton` groups; menus use `ExpressiveMenu`.
-- Flexible top app bars, `ContainedLoadingIndicator`, bottom sheets for decisions that need explanation.
-- Check each screen on a device or emulator, in light and dark, before calling it done.
+- `ContainedLoadingIndicator`, bottom sheets for decisions that need explanation.
+- Compact sizes: standard top app bars, default or small buttons and FAB, titles no larger than `titleLarge`.
+  Medium and large variants looked oversized on a real phone (384dp wide).
+- Every `NavHost` sets all transitions, including `predictivePopEnterTransition` and
+  `predictivePopExitTransition`: their default shrinks the screen during the back gesture.
+- Check each screen on a device or emulator, in light and dark, before calling it done, back gesture included.
 
 ## Frigate facts the client relies on (verified against 0.18.3)
 
@@ -54,6 +58,8 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 
 ## Android platform notes
 
+- Keep `androidx.navigationevent` at 1.2.0 or later: with 1.1.2 the app crashed when the back gesture was made
+  with a menu open.
 - Android 17 (target 37) blocks the local network until `ACCESS_LOCAL_NETWORK` is granted; connections time
   out without it.
 - Plain HTTP is allowed on purpose (Frigate on a home network); the server form warns about it.

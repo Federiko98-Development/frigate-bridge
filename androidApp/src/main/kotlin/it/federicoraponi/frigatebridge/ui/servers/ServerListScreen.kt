@@ -24,15 +24,15 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +60,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.LocalNetworkNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.MenuEntry
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
@@ -118,12 +119,12 @@ fun ServerListScreen(
     localNetworkBlocked: Boolean = false,
 ) {
     var removing by rememberSaveable { mutableStateOf<String?>(null) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.servers_title)) },
+            TopAppBar(
+                title = { ScreenTitle(stringResource(R.string.servers_title)) },
                 actions = {
                     IconButton(onClick = actions.refresh, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh))
@@ -178,16 +179,10 @@ fun ServerListScreen(
 @Composable
 private fun AddServerButton(onClick: () -> Unit) {
     val label = stringResource(R.string.server_add)
-    MediumExtendedFloatingActionButton(
+    SmallExtendedFloatingActionButton(
         onClick = onClick,
         // The button hides its text from accessibility services, so the icon carries the label.
-        icon = {
-            Icon(
-                Icons.Filled.Add,
-                contentDescription = label,
-                modifier = Modifier.size(28.dp),
-            )
-        },
+        icon = { Icon(Icons.Filled.Add, contentDescription = label) },
         text = { Text(label) },
     )
 }
@@ -206,12 +201,12 @@ private fun ServerList(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         // Room for the floating button below the last item.
-        contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, top = Spacing.sm, bottom = 120.dp),
+        contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, top = Spacing.sm, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
         if (localNetworkBlocked) {
             item(key = "local-network") {
-                LocalNetworkNotice(actions.allowLocalNetwork, Modifier.padding(bottom = Spacing.xl))
+                LocalNetworkNotice(actions.allowLocalNetwork, Modifier.padding(bottom = Spacing.lg))
             }
         }
         if (default != null) {
@@ -224,7 +219,7 @@ private fun ServerList(
                 val title = if (default == null) R.string.servers_all else R.string.servers_other
                 ListGroup(
                     title = stringResource(title),
-                    modifier = Modifier.padding(top = if (default == null) 0.dp else Spacing.xl),
+                    modifier = Modifier.padding(top = if (default == null) 0.dp else Spacing.lg),
                 ) {}
             }
             itemsIndexed(others, key = { _, server -> server.id }) { index, server ->
@@ -244,36 +239,37 @@ private fun DefaultServerCard(
     Surface(
         onClick = { actions.open(server.id) },
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraExtraLarge,
+        shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
-        Column(
-            modifier = Modifier.padding(Spacing.xl),
-            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+        Row(
+            modifier = Modifier.padding(start = Spacing.lg, top = Spacing.md, bottom = Spacing.md, end = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ServerBadge(server.name, server.colorIndex, size = 72.dp)
-                Box(Modifier.weight(1f))
-                ServerMenu(server, actions, onRemove)
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            ServerBadge(server.name, server.colorIndex, size = 48.dp)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
-                    Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.server_default), style = MaterialTheme.typography.labelLarge)
+                    Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Text(stringResource(R.string.server_default), style = MaterialTheme.typography.labelMedium)
                 }
-                Text(server.name, style = MaterialTheme.typography.displaySmallEmphasized)
+                Text(server.name, style = MaterialTheme.typography.titleLargeEmphasized)
                 Text(
                     server.address,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                StatusPill(server.status)
             }
-            StatusPill(server.status)
+            ServerMenu(server, actions, onRemove)
         }
     }
 }
@@ -296,11 +292,16 @@ private fun ServerRow(
         trailingContent = { ServerMenu(server, actions, onRemove) },
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Text(server.address, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    server.address,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 StatusPill(server.status)
             }
         },
-    ) { Text(server.name, style = MaterialTheme.typography.titleMediumEmphasized) }
+    ) { Text(server.name, style = MaterialTheme.typography.titleSmallEmphasized) }
 }
 
 @Composable
@@ -318,8 +319,8 @@ private fun StatusPill(status: ServerStatus) {
     Surface(shape = MaterialTheme.shapes.large, color = container, contentColor = content) {
         Text(
             text,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 2.dp),
         )
     }
 }
