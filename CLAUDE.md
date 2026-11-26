@@ -55,6 +55,10 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Login returns 404 when authentication is disabled, and 429 when rate limited.
 - A camera group's `cameras` is a list or a comma-separated string.
 - The self-signed certificate does not name the server's address.
+- WebRTC signalling is one request: `POST /api/go2rtc/webrtc?src=<stream>` with a JSON offer, answered with a
+  JSON answer. Media then flows to go2rtc's candidates (port 8555). No STUN server is used by the app.
+- Recordings play as HLS from `/vod/<camera>/start/<s>/end/<e>/master.m3u8` (not under `/api`), with the same
+  Bearer header on every request.
 
 ## Android platform notes
 
@@ -75,9 +79,23 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Only the client in `shared` calls Frigate; screens never call the API.
 - Every object that belongs to a server carries its `serverId` (e.g. `CameraRef(serverId, cameraName)`).
 - Within a feature: `shared` with tests first, then the Compose screen.
+- Do not run tests unless asked: compiling is enough to check a change. CI runs them on every push to main.
 - Tests use fake Frigate servers (`FakeFrigate`, `FakeNetwork`) and made-up data.
 - UI text is never hardcoded: English in `res/values/strings.xml`, Italian in `res/values-it/strings.xml`.
 - Library versions live only in `gradle/libs.versions.toml`.
+
+## Video
+
+- `shared` handles signalling and URLs; the platform provides `LivePeer` (Android: `video/WebRtcPeer`) and the
+  player (Media3 ExoPlayer, with the server's accepted certificate).
+- G.711 camera audio arrives from go2rtc as uncompressed FLAC that Android's decoders cannot play (sample
+  numbers are coded wrongly). the renderer in `video/LiveRenderersFactory.kt` reads it.
+- A live connection exists only while its video is on screen and the app is in the foreground.
+- Live view order, as in Frigate's web interface: go2rtc's fragmented MP4 over HTTPS first (about 1 s to the
+  first frame), WebRTC only if that fails (it needs port 8555 reachable). The protocol on `/live/mse/api/ws`: send `{"type":"mse","value":"<codecs>"}`, receive one text message with
+  the content type, then the file as binary messages.
+
+- The camera grid shows `latest.jpg` at low resolution, reloaded only for visible cards on the front screen.
 
 ## Commands
 

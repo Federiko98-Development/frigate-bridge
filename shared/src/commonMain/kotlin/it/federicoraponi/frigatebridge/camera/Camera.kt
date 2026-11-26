@@ -15,6 +15,14 @@ data class Camera(
     val enabled: Boolean,
     /** Whether it appears in the "all cameras" view. Hidden cameras still appear in their groups. */
     val onDashboard: Boolean,
+    /** The streams that can be watched live, the first being the preferred one. */
+    val liveStreams: List<LiveStream> = emptyList(),
+)
+
+data class LiveStream(
+    val label: String,
+    /** The name of the stream in go2rtc. */
+    val name: String,
 )
 
 data class CameraGroup(
@@ -51,6 +59,11 @@ fun cameraCatalog(
                     displayName = camera.friendlyName?.takeIf { it.isNotBlank() } ?: name.replace('_', ' '),
                     enabled = camera.enabled,
                     onDashboard = camera.ui.dashboard,
+                    // Without a configured mapping the go2rtc stream carries the camera's name.
+                    liveStreams =
+                        camera.live.streams
+                            .map { (label, stream) -> LiveStream(label, stream) }
+                            .ifEmpty { listOf(LiveStream(name, name)) },
                 )
             }
     val visible = cameras.map { it.ref.cameraName }.toSet()

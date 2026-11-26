@@ -64,4 +64,20 @@
     <string name="local_network_title">Local network access is off</string>
     <string name="local_network_message">Android blocks servers on your home network until you allow this app to reach them.</string>
     <string name="local_network_allow">Allow access</string>
+    <string name="video_live">Live</string>
+    <string name="video_recording">Recording</string>
+    <string name="video_failed">Video not available</string>
+    <string name="video_no_recording">Nothing recorded in the last 24 hours</string>
+    <string name="video_first_frame">First frame after %1$d ms</string>
+    <string name="video_round_trip">Network delay %1$d ms</string>
+    <string name="video_mute">Mute</string>
+    <string name="video_unmute">Unmute</string>
+    <string name="video_play">Play</string>
+    <string name="video_pause">Pause</string>
+    <string name="video_back_10">−10 s</string>
+    <string name="video_forward_10">+10 s</string>
+    <string name="video_recorded_from">Recorded %1$s – %2$s</string>
+    <string name="video_via_webrtc">WebRTC</string>
+    <string name="video_via_https">Live over HTTPS</string>
+    <string name="video_no_audio">No compatible sound from this camera</string>
 </resources>

@@ -3,6 +3,8 @@ package it.federicoraponi.frigatebridge.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.camera.Camera
+import it.federicoraponi.frigatebridge.camera.CameraRef
+import it.federicoraponi.frigatebridge.frigate.FrigateError
 import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.RegistryState
 import it.federicoraponi.frigatebridge.server.Server
@@ -60,6 +62,9 @@ class CamerasViewModel(
 ) : ViewModel() {
     private val selectedGroup = MutableStateFlow<GroupSelection?>(null)
 
+    // Kept so that the grid is not empty when the user comes back to it.
+    private val previews = mutableMapOf<CameraRef, ByteArray>()
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<CamerasState> =
         registry.state
@@ -89,6 +94,20 @@ class CamerasViewModel(
     fun retry() {
         val serverId = registry.state.value?.activeServerId ?: return
         viewModelScope.launch { registry.session(serverId)?.refresh() }
+    }
+
+    /** The last picture loaded for [camera], if any. */
+    fun cachedPreview(camera: CameraRef): ByteArray? = previews[camera]
+
+    /** A current low-resolution JPEG of [camera], or `null` if it cannot be read right now. */
+    suspend fun loadPreview(camera: CameraRef): ByteArray? {
+        val session = registry.session(camera.serverId) ?: return null
+        return try {
+            session.latestFrame(camera.cameraName, PREVIEW_HEIGHT).also { previews[camera] = it }
+        } catch (_: FrigateError) {
+            // The grid keeps the previous picture; the server's state is reported elsewhere.
+            null
+        }
     }
 
     private fun activeServer(current: RegistryState?): Flow<CamerasState> {
@@ -138,3 +157,6 @@ class CamerasViewModel(
         val name: String,
     )
 }
+
+/** Height in pixels of the pictures in the camera grid. */
+private const val PREVIEW_HEIGHT = 270

@@ -19,8 +19,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.ui.StartDestination
 import it.federicoraponi.frigatebridge.ui.StartViewModel
+import it.federicoraponi.frigatebridge.ui.camera.CameraRoute
 import it.federicoraponi.frigatebridge.ui.cameras.CamerasRoute
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
 import it.federicoraponi.frigatebridge.ui.servers.ServerFormRoute
@@ -33,6 +35,12 @@ private data object Servers
 
 @Serializable
 private data object Cameras
+
+@Serializable
+private data class CameraView(
+    val serverId: String,
+    val cameraName: String,
+)
 
 @Serializable
 private data class ServerForm(
@@ -93,6 +101,16 @@ private fun AppNavHost(destination: StartDestination) {
             CamerasRoute(
                 onShowServers = { navController.showServers() },
                 onEditServer = { navController.navigate(ServerForm(it)) { launchSingleTop = true } },
+                onOpenCamera = {
+                    navController.navigate(CameraView(it.serverId, it.cameraName)) { launchSingleTop = true }
+                },
+            )
+        }
+        composable<CameraView> { entry ->
+            val route = entry.toRoute<CameraView>()
+            CameraRoute(
+                camera = CameraRef(route.serverId, route.cameraName),
+                onClose = { navController.popBackStack<CameraView>(inclusive = true) },
             )
         }
         composable<ServerForm> { entry ->

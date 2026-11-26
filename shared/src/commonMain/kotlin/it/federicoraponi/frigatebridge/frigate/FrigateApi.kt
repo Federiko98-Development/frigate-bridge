@@ -6,11 +6,14 @@ import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
+import io.ktor.http.encodeURLParameter
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import io.ktor.http.setCookie
 import kotlinx.coroutines.CancellationException
@@ -32,6 +35,9 @@ interface TokenStore {
 
     suspend fun write(token: String?)
 }
+
+private const val MAX_ERROR_LENGTH = 200
+private const val PREVIEW_QUALITY = 60
 
 internal val frigateJson =
     Json {
@@ -68,23 +74,89 @@ class FrigateApi(
 
     suspend fun frigateProfiles(): FrigateProfilesDto = decode(get("profiles"))
 
+    /** The most recent picture of [camera] as a JPEG [height] pixels high. */
+    suspend fun latestFrame(
+        camera: String,
+        height: Int,
+    ): ByteArray {
+        val path = "${camera.encodeURLPathPart()}/latest.jpg?height=$height&quality=$PREVIEW_QUALITY"
+        val response = authorized(HttpMethod.Get, path)
+        return transport { response.readRawBytes() }
+    }
+
+    /** Recorded segments of [camera] between two times in seconds since the epoch. */
+    suspend fun recordings(
+        camera: String,
+        after: Long,
+        before: Long,
+    ): List<RecordingDto> = decode(get("${camera.encodeURLPathPart()}/recordings?after=$after&before=$before"))
+
+    /** Sends a WebRTC offer for a go2rtc [stream] and returns the answer. */
+    suspend fun webRtcAnswer(
+        stream: String,
+        offerSdp: String,
+    ): String {
+        val offer = frigateJson.encodeToString(SessionDescriptionDto("offer", offerSdp))
+        val path = "go2rtc/webrtc?src=${stream.encodeURLParameter()}"
+        return decode<SessionDescriptionDto>(call(HttpMethod.Post, path, offer)).sdp
+    }
+
+    /** The HLS playlist of a recorded interval. It is served outside `/api` and needs [authorizationHeaders]. */
+    fun recordingPlaylistUrl(
+        camera: String,
+        start: Long,
+        end: Long,
+    ): String = "${baseUrl.trimEnd('/')}/vod/${camera.encodeURLPathPart()}/start/$start/end/$end/master.m3u8"
+
+    /**
+     * The WebSocket on which go2rtc sends a [stream] as fragmented MP4, over the same HTTPS connection as the
+     * rest of the app. It needs [authorizationHeaders].
+     */
+    fun mp4StreamUrl(stream: String): String =
+        "${baseUrl.trimEnd('/')}/live/mse/api/ws?src=${stream.encodeURLParameter()}"
+
+    /** Headers for a player that downloads media by itself. Logs in again first if the token has expired. */
+    suspend fun authorizationHeaders(): Map<String, String> {
+        version()
+        return tokens.read()?.let { mapOf(HttpHeaders.Authorization to "Bearer $it") }.orEmpty()
+    }
+
     /** Allows a new login attempt after a failed one. Call it when the user asks to retry. */
     suspend fun resetLoginFailure() {
         loginMutex.withLock { loginFailure = null }
     }
 
-    private suspend fun get(path: String): String {
+    private suspend fun get(path: String): String = call(HttpMethod.Get, path)
+
+    private suspend fun call(
+        method: HttpMethod,
+        path: String,
+        jsonBody: String? = null,
+    ): String {
+        val response = authorized(method, path, jsonBody)
+        return transport { response.bodyAsText() }
+    }
+
+    /** A successful answer, after logging in again if the token was refused. */
+    private suspend fun authorized(
+        method: HttpMethod,
+        path: String,
+        jsonBody: String? = null,
+    ): HttpResponse {
         val usedToken = tokens.read()
-        var response = send(HttpMethod.Get, path, usedToken)
+        var response = send(method, path, usedToken, jsonBody)
         if (response.status == HttpStatusCode.Unauthorized) {
             val freshToken = renewToken(staleToken = usedToken)
-            response = send(HttpMethod.Get, path, freshToken)
+            response = send(method, path, freshToken, jsonBody)
             if (response.status == HttpStatusCode.Unauthorized) throw FrigateError.LoginRejected()
         }
         if (!response.status.isSuccess()) {
-            throw FrigateError.UnexpectedResponse("HTTP ${response.status.value} on /api/$path")
+            // The server's explanation helps, e.g. go2rtc saying that no codec matches.
+            val reason = transport { response.bodyAsText() }.trim().take(MAX_ERROR_LENGTH)
+            val endpoint = path.substringBefore('?')
+            throw FrigateError.UnexpectedResponse("HTTP ${response.status.value} on /api/$endpoint $reason".trim())
         }
-        return transport { response.bodyAsText() }
+        return response
     }
 
     private suspend fun renewToken(staleToken: String?): String? =

@@ -4,9 +4,11 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonTransformingSerializer
 
@@ -24,6 +26,37 @@ data class CameraConfigDto(
     @SerialName("friendly_name") val friendlyName: String? = null,
     val enabled: Boolean = true,
     val ui: CameraUiDto = CameraUiDto(),
+    val live: CameraLiveDto = CameraLiveDto(),
+)
+
+@Serializable
+data class CameraLiveDto(
+    /** Label shown to the user to go2rtc stream name. */
+    @Serializable(with = StreamMapSerializer::class)
+    val streams: Map<String, String> = emptyMap(),
+)
+
+/** Frigate may send an empty list where it has no streams to map. */
+object StreamMapSerializer : KSerializer<Map<String, String>> by EmptyListAsMapSerializer
+
+private object EmptyListAsMapSerializer :
+    JsonTransformingSerializer<Map<String, String>>(MapSerializer(String.serializer(), String.serializer())) {
+    override fun transformDeserialize(element: JsonElement): JsonElement =
+        if (element is JsonArray) JsonObject(emptyMap()) else element
+}
+
+/** A recorded segment of a camera, with times in seconds since the epoch. */
+@Serializable
+data class RecordingDto(
+    @SerialName("start_time") val startTime: Double,
+    @SerialName("end_time") val endTime: Double,
+)
+
+/** A WebRTC offer or answer, as go2rtc exchanges them. */
+@Serializable
+data class SessionDescriptionDto(
+    val type: String,
+    val sdp: String,
 )
 
 @Serializable

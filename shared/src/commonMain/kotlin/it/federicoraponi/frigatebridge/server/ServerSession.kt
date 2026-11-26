@@ -23,6 +23,27 @@ data class ServerSnapshot(
     val catalog: CameraCatalog,
 )
 
+/** What a player needs to show a live stream carried over HTTPS. */
+data class HttpsLiveStream(
+    val url: String,
+    val headers: Map<String, String>,
+    val certificateSha256: String?,
+)
+
+/** What a player needs to show a recorded interval, with times in seconds since the epoch. */
+data class RecordingClip(
+    val url: String,
+    val headers: Map<String, String>,
+    /** The certificate accepted for the server, which the player must accept too. */
+    val certificateSha256: String?,
+    val startTime: Long,
+    val endTime: Long,
+)
+
+private const val CLIP_SECONDS = 60L
+private const val SECONDS_PER_HOUR = 3_600L
+private const val SECONDS_PER_DAY = 86_400L
+
 sealed interface ConnectionState {
     data object Idle : ConnectionState
 
@@ -68,8 +89,56 @@ class ServerSession(
             result
         }
 
+    suspend fun webRtcAnswer(
+        stream: String,
+        offerSdp: String,
+    ): String = connectedApi().webRtcAnswer(stream, offerSdp)
+
+    suspend fun httpsLiveStream(stream: String): HttpsLiveStream {
+        val api = connectedApi()
+        return HttpsLiveStream(api.mp4StreamUrl(stream), api.authorizationHeaders(), server.certificateSha256)
+    }
+
+    /** The most recent picture of a camera, as a small JPEG. */
+    suspend fun latestFrame(
+        camera: String,
+        height: Int,
+    ): ByteArray = connectedApi().latestFrame(camera, height)
+
+    /** The last minute recorded by a camera, or `null` if it recorded nothing in the past day. */
+    suspend fun latestRecording(
+        camera: String,
+        now: Long,
+    ): RecordingClip? {
+        val api = connectedApi()
+        // The past hour is usually enough and far smaller than a whole day of segments.
+        val segments =
+            api.recordings(camera, now - SECONDS_PER_HOUR, now).ifEmpty {
+                api.recordings(camera, now - SECONDS_PER_DAY, now)
+            }
+        val last = segments.maxByOrNull { it.endTime } ?: return null
+        val end = last.endTime.toLong()
+        val start = maxOf(segments.minOf { it.startTime }.toLong(), end - CLIP_SECONDS)
+        return RecordingClip(
+            url = api.recordingPlaylistUrl(camera, start, end),
+            headers = api.authorizationHeaders(),
+            certificateSha256 = server.certificateSha256,
+            startTime = start,
+            endTime = end,
+        )
+    }
+
     fun close() {
         http.close()
+    }
+
+    /** The client of the address that answered, connecting first if needed. */
+    private suspend fun connectedApi(): FrigateApi {
+        val current = mutableState.value as? ConnectionState.Connected
+        val state = current ?: refresh()
+        if (state is ConnectionState.Failed) throw state.error
+        val url = (state as ConnectionState.Connected).snapshot.url
+        return apis.first { it.first == url }.second
     }
 
     private suspend fun load(): ServerSnapshot {

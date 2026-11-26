@@ -34,6 +34,12 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.koin.android)
     implementation(libs.koin.androidxCompose)
+
+    implementation(libs.webrtc.android)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.datasource.okhttp)
+    implementation(libs.media3.ui.compose)
 }
 
 android {

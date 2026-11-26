@@ -63,4 +63,20 @@
     <string name="local_network_title">Accesso alla rete locale non consentito</string>
     <string name="local_network_message">Android blocca i server sulla rete di casa finché non permetti a questa app di raggiungerli.</string>
     <string name="local_network_allow">Consenti l\'accesso</string>
+    <string name="video_live">Diretta</string>
+    <string name="video_recording">Registrazione</string>
+    <string name="video_failed">Video non disponibile</string>
+    <string name="video_no_recording">Nessuna registrazione nelle ultime 24 ore</string>
+    <string name="video_first_frame">Primo fotogramma dopo %1$d ms</string>
+    <string name="video_round_trip">Ritardo di rete %1$d ms</string>
+    <string name="video_mute">Disattiva audio</string>
+    <string name="video_unmute">Attiva audio</string>
+    <string name="video_play">Riproduci</string>
+    <string name="video_pause">Pausa</string>
+    <string name="video_back_10">−10 s</string>
+    <string name="video_forward_10">+10 s</string>
+    <string name="video_recorded_from">Registrato %1$s – %2$s</string>
+    <string name="video_via_webrtc">WebRTC</string>
+    <string name="video_via_https">Diretta via HTTPS</string>
+    <string name="video_no_audio">Nessun audio compatibile da questa camera</string>
 </resources>

@@ -4,6 +4,7 @@ import it.federicoraponi.frigatebridge.server.DataStoreServerStore
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSessionFactory
 import it.federicoraponi.frigatebridge.server.ServerStore
+import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
@@ -24,6 +25,7 @@ val sharedModule =
         viewModelOf(::ServerListViewModel)
         viewModelOf(::CamerasViewModel)
         viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
+        viewModel { parameters -> CameraViewModel(parameters.get(), get()) }
     }
 
 /** Starts Koin. Call it once, when the app launches. */

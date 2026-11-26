@@ -1,5 +1,6 @@
 package it.federicoraponi.frigatebridge.ui.cameras
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -86,12 +88,15 @@ data class CamerasActions(
     val retry: () -> Unit = {},
     val editServer: (String) -> Unit = {},
     val allowLocalNetwork: () -> Unit = {},
+    val openCamera: (CameraRef) -> Unit = {},
+    val previews: CameraPreviews = CameraPreviews.None,
 )
 
 @Composable
 fun CamerasRoute(
     onShowServers: () -> Unit,
     onEditServer: (String) -> Unit,
+    onOpenCamera: (CameraRef) -> Unit,
     viewModel: CamerasViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -113,6 +118,8 @@ fun CamerasRoute(
                 retry = viewModel::retry,
                 editServer = onEditServer,
                 allowLocalNetwork = allowLocalNetwork,
+                openCamera = onOpenCamera,
+                previews = CameraPreviews(viewModel::cachedPreview, viewModel::loadPreview),
             ),
     )
 }
@@ -156,7 +163,7 @@ fun CamerasScreen(
                             shapes = ButtonDefaults.shapes(),
                         ) { Text(stringResource(R.string.server_edit)) }
                     }
-                is CamerasContent.Ready -> CameraGrid(content)
+                is CamerasContent.Ready -> CameraGrid(content, actions.openCamera, actions.previews)
             }
         }
     }
@@ -255,7 +262,11 @@ private fun GroupSelector(
 }
 
 @Composable
-private fun CameraGrid(content: CamerasContent.Ready) {
+private fun CameraGrid(
+    content: CamerasContent.Ready,
+    onOpen: (CameraRef) -> Unit,
+    previews: CameraPreviews,
+) {
     if (content.cameras.isEmpty()) {
         MessageState(icon = Icons.Filled.Home, title = stringResource(R.string.cameras_empty))
         return
@@ -271,40 +282,55 @@ private fun CameraGrid(content: CamerasContent.Ready) {
                 NoticeCard(stringResource(R.string.cameras_outdated, version, MINIMUM_FRIGATE_VERSION))
             }
         }
-        items(content.cameras, key = { it.ref.cameraName }) { CameraCard(it, Modifier.animateItem()) }
+        items(content.cameras, key = { it.ref.cameraName }) { camera ->
+            CameraCard(camera, previews, onClick = { onOpen(camera.ref) }, modifier = Modifier.animateItem())
+        }
     }
 }
 
 @Composable
 private fun CameraCard(
     camera: Camera,
+    previews: CameraPreviews,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     Surface(
+        onClick = onClick,
         modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         shape = MaterialTheme.shapes.large,
         color = colors.surfaceContainer,
     ) {
         Column(modifier = Modifier.padding(Spacing.xs)) {
-            // The live preview will take this place.
             Surface(
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
                 shape = MaterialTheme.shapes.medium,
                 color = colors.surfaceContainerHighest,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Surface(
-                        shape = MaterialShapes.Cookie9Sided.toShape(),
-                        color = if (camera.enabled) colors.primaryContainer else colors.surfaceContainerHigh,
-                        contentColor =
-                            if (camera.enabled) colors.onPrimaryContainer else colors.onSurfaceVariant,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_videocam),
-                            contentDescription = null,
-                            modifier = Modifier.padding(Spacing.sm).size(20.dp),
-                        )
+                val picture = if (camera.enabled) previewPicture(camera.ref, previews) else null
+                if (picture != null) {
+                    Image(
+                        bitmap = picture,
+                        // The camera's name is written under the picture.
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = MaterialShapes.Cookie9Sided.toShape(),
+                            color = if (camera.enabled) colors.primaryContainer else colors.surfaceContainerHigh,
+                            contentColor =
+                                if (camera.enabled) colors.onPrimaryContainer else colors.onSurfaceVariant,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_videocam),
+                                contentDescription = null,
+                                modifier = Modifier.padding(Spacing.sm).size(20.dp),
+                            )
+                        }
                     }
                 }
             }
