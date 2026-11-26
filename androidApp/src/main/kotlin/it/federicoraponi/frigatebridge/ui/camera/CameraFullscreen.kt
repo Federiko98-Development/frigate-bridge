@@ -32,10 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.CameraState
-import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.ClipState
 import it.federicoraponi.frigatebridge.ui.TimelineState
-import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.VideoMode
 import it.federicoraponi.frigatebridge.ui.capture.ClipButton
 import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
@@ -49,12 +47,10 @@ import it.federicoraponi.frigatebridge.ui.recordings.TimelineZoom
 internal fun FullscreenCamera(
     state: CameraState,
     muted: Boolean,
-    onMutedChange: (Boolean) -> Unit,
-    onExit: () -> Unit,
-    viewModel: CameraViewModel,
     hasAudio: Boolean,
     messages: SnackbarHostState,
-    onPhoto: (() -> Unit)?,
+    actions: CameraActions,
+    onExit: () -> Unit,
     recordings: @Composable () -> Unit,
     video: @Composable () -> Unit,
 ) {
@@ -69,14 +65,14 @@ internal fun FullscreenCamera(
             ) {
                 // The button stays while a recording is on, also if the camera stops allowing new ones.
                 if (state.mode == VideoMode.Live && (state.canRecordClip || state.clip is ClipState.Recording)) {
-                    ClipButton(state.clip, viewModel::startClip, viewModel::stopClip)
+                    ClipButton(state.clip, actions.startClip, actions.stopClip)
                 }
-                onPhoto?.let { PhotoButton(it) }
-                if (state.mode == VideoMode.Live && hasAudio) MuteButton(muted, onMutedChange)
+                actions.takePhoto?.let { PhotoButton(it) }
+                if (state.mode == VideoMode.Live && hasAudio) MuteButton(muted, actions.setMuted)
                 ExitFullscreenButton(onExit)
             }
             if (state.mode == VideoMode.Live && state.streams.size > 1) {
-                StreamChoice(state, viewModel::selectStream, Modifier.align(Alignment.TopStart))
+                StreamChoice(state, actions.selectStream, Modifier.align(Alignment.TopStart))
             }
             (state.clip as? ClipState.Recording)?.let {
                 RecordingBadge(it.startedAt, Modifier.align(Alignment.TopCenter))
@@ -86,8 +82,8 @@ internal fun FullscreenCamera(
             if (state.mode == VideoMode.Live && ptz != null) {
                 if (ptz.canPanAndTilt) {
                     DirectionPad(
-                        viewModel::startMoving,
-                        viewModel::stopMoving,
+                        actions.startMoving,
+                        actions.stopMoving,
                         modifier = Modifier.align(Alignment.BottomEnd),
                         buttonSize = 48.dp,
                         container = overlay,
@@ -96,8 +92,8 @@ internal fun FullscreenCamera(
                 }
                 if (ptz.canZoom) {
                     ZoomButtons(
-                        viewModel::startMoving,
-                        viewModel::stopMoving,
+                        actions.startMoving,
+                        actions.stopMoving,
                         modifier = Modifier.align(Alignment.BottomStart),
                         buttonSize = 48.dp,
                         container = overlay,
@@ -167,8 +163,8 @@ private fun DrawerHandle() {
 @Composable
 internal fun FullscreenTimeline(
     state: TimelineState,
-    viewModel: TimelineViewModel,
     player: Player?,
+    onSeek: (Long) -> Unit,
 ) {
     val day = state.day ?: return
     Row(
@@ -183,7 +179,7 @@ internal fun FullscreenTimeline(
             markers = state.markers,
             time = state.time,
             zoom = TimelineZoom.Minutes,
-            onSeek = viewModel::seekTo,
+            onSeek = onSeek,
             modifier = Modifier.weight(1f),
         )
     }

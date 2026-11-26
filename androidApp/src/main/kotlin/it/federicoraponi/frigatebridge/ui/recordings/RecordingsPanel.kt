@@ -25,7 +25,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.media3.common.Player
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.TimelineState
-import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.camera.RecordingTransport
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
@@ -38,15 +37,25 @@ val playbackSpeeds = listOf(1f, 2f, 4f, 8f)
 
 private val exportLengths = listOf(30 to R.string.export_30s, 60 to R.string.export_1m, 300 to R.string.export_5m)
 
+/** What the controls under the recordings can ask for. */
+data class RecordingsActions(
+    val selectDay: (String) -> Unit = {},
+    val seekTo: (Long) -> Unit = {},
+    val skip: (Int) -> Unit = {},
+    val export: (start: Long, seconds: Int) -> Unit = { _, _ -> },
+    val clearExport: () -> Unit = {},
+    val setSpeed: (Float) -> Unit = {},
+    /** `null` while there is no picture to take. */
+    val takePhoto: (() -> Unit)? = null,
+)
+
 /** Everything below the video of the recordings: date, timeline, transport, speed and export. */
 @Composable
 fun RecordingsPanel(
     state: TimelineState,
-    viewModel: TimelineViewModel,
     player: Player?,
     speed: Float,
-    onSpeed: (Float) -> Unit,
-    onPhoto: (() -> Unit)? = null,
+    actions: RecordingsActions,
 ) {
     var zoom by rememberSaveable { mutableStateOf(TimelineZoom.Hour) }
     var choosingExport by rememberSaveable { mutableStateOf(false) }
@@ -60,7 +69,7 @@ fun RecordingsPanel(
             DaySelector(
                 selected = day.date,
                 available = state.days.map { it.date },
-                onSelect = viewModel::selectDay,
+                onSelect = actions.selectDay,
             )
             TimelineBar(
                 day = day,
@@ -68,7 +77,7 @@ fun RecordingsPanel(
                 markers = state.markers,
                 time = state.time,
                 zoom = zoom,
-                onSeek = viewModel::seekTo,
+                onSeek = actions.seekTo,
             )
             ConnectedChoice(
                 labels =
@@ -82,19 +91,19 @@ fun RecordingsPanel(
             )
             // Nothing to move through on a day without recordings.
             if (state.ranges.isNotEmpty()) {
-                RecordingTransport(player, onSkip = viewModel::skip)
+                RecordingTransport(player, onSkip = actions.skip)
                 ConnectedChoice(
                     labels = playbackSpeeds.map { "${it.toInt()}×" },
                     selected = playbackSpeeds.indexOf(speed),
-                    onSelect = { onSpeed(playbackSpeeds[it]) },
+                    onSelect = { actions.setSpeed(playbackSpeeds[it]) },
                 )
-                onPhoto?.let { take ->
+                actions.takePhoto?.let { take ->
                     FilledTonalButton(onClick = take, shapes = ButtonDefaults.shapes()) {
                         Icon(painterResource(R.drawable.ic_photo_camera), contentDescription = null)
                         Text(stringResource(R.string.photo_take), modifier = Modifier.padding(start = Spacing.sm))
                     }
                 }
-                ExportSection(state.export, onChoose = { choosingExport = true }, onDone = viewModel::clearExport)
+                ExportSection(state.export, onChoose = { choosingExport = true }, onDone = actions.clearExport)
             }
         }
     }
@@ -104,7 +113,7 @@ fun RecordingsPanel(
             onDismiss = { choosingExport = false },
             onExport = { start, seconds ->
                 choosingExport = false
-                viewModel.export(start, seconds)
+                actions.export(start, seconds)
             },
         )
     }

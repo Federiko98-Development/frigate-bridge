@@ -2,13 +2,16 @@ package it.federicoraponi.frigatebridge.ui.camera
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -23,14 +26,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.ui.CameraArgs
+import it.federicoraponi.frigatebridge.ui.CameraState
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.ClipState
 import it.federicoraponi.frigatebridge.ui.LiveState
 import it.federicoraponi.frigatebridge.ui.PlaybackState
+import it.federicoraponi.frigatebridge.ui.PtzMove
 import it.federicoraponi.frigatebridge.ui.TimelineArgs
 import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.VideoMode
@@ -40,7 +47,9 @@ import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
 import it.federicoraponi.frigatebridge.ui.designsystem.KeepScreenOn
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.recordings.RecordingsActions
 import it.federicoraponi.frigatebridge.ui.recordings.RecordingsPanel
+import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
@@ -127,34 +136,114 @@ fun CameraRoute(
             onMeasures = { measures = it },
         )
 
+    val actions =
+        CameraActions(
+            close = onClose,
+            selectMode = viewModel::selectMode,
+            selectStream = viewModel::selectStream,
+            setMuted = { muted = it },
+            fullscreen = { fullscreen = true },
+            takePhoto = takePhoto.takeIf { canTakePhoto },
+            startClip = viewModel::startClip,
+            stopClip = viewModel::stopClip,
+            clearClip = viewModel::clearClip,
+            startMoving = viewModel::startMoving,
+            stopMoving = viewModel::stopMoving,
+            goToPreset = viewModel::goToPreset,
+            setFeature = viewModel::setFeature,
+        )
     if (fullscreen) {
         BackHandler { fullscreen = false }
         LandscapeFullscreen()
         FullscreenCamera(
             state = state,
             muted = muted,
-            onMutedChange = { muted = it },
-            onExit = { fullscreen = false },
-            viewModel = viewModel,
             hasAudio = measures.hasAudio != false,
             messages = captures.messages,
-            onPhoto = takePhoto.takeIf { canTakePhoto },
+            actions = actions,
+            onExit = { fullscreen = false },
             recordings = {
                 if (timeline != null && recordings != null) {
-                    FullscreenTimeline(recordings, timeline, player)
+                    FullscreenTimeline(recordings, player, onSeek = timeline::seekTo)
                 }
             },
         ) { video(content) }
         return
     }
+    CameraScreen(
+        state = state,
+        muted = muted,
+        measures = measures,
+        openedOnRecordings = mode == VideoMode.Recording,
+        messages = captures.messages,
+        actions = actions,
+        recordings =
+            if (timeline != null && recordings != null) {
+                {
+                    FullscreenButton { fullscreen = true }
+                    RecordingsPanel(
+                        state = recordings,
+                        player = player,
+                        speed = speed,
+                        actions =
+                            RecordingsActions(
+                                selectDay = timeline::selectDay,
+                                seekTo = timeline::seekTo,
+                                skip = timeline::skip,
+                                export = timeline::export,
+                                clearExport = timeline::clearExport,
+                                setSpeed = { speed = it },
+                                takePhoto = actions.takePhoto,
+                            ),
+                    )
+                }
+            } else {
+                null
+            },
+        video = { video(content) },
+    )
+}
+
+/** What the page of a camera can ask for. */
+data class CameraActions(
+    val close: () -> Unit = {},
+    val selectMode: (VideoMode) -> Unit = {},
+    val selectStream: (String) -> Unit = {},
+    val setMuted: (Boolean) -> Unit = {},
+    val fullscreen: () -> Unit = {},
+    /** `null` while there is no picture to take. */
+    val takePhoto: (() -> Unit)? = null,
+    val startClip: () -> Unit = {},
+    val stopClip: () -> Unit = {},
+    val clearClip: () -> Unit = {},
+    val startMoving: (PtzMove) -> Unit = {},
+    val stopMoving: () -> Unit = {},
+    val goToPreset: (String) -> Unit = {},
+    val setFeature: (CameraFeature, Boolean) -> Unit = { _, _ -> },
+)
+
+/** The upright page of a camera: the video with what can be done with it underneath. */
+@Composable
+fun CameraScreen(
+    state: CameraState,
+    muted: Boolean,
+    measures: LiveMeasures,
+    /** The page was opened on the recordings, and keeps the way back to them. */
+    openedOnRecordings: Boolean,
+    messages: SnackbarHostState,
+    actions: CameraActions,
+    modifier: Modifier = Modifier,
+    /** What goes under the video of the recordings; `null` until they can be shown. */
+    recordings: (@Composable ColumnScope.() -> Unit)? = null,
+    video: @Composable BoxScope.() -> Unit,
+) {
     Scaffold(
-        snackbarHost = { SnackbarHost(captures.messages) },
+        modifier = modifier,
+        snackbarHost = { SnackbarHost(messages) },
         topBar = {
             TopAppBar(
                 title = { ScreenTitle(state.title) },
-                navigationIcon = {
-                    BackButton(onClose)
-                },
+                navigationIcon = { BackButton(actions.close) },
             )
         },
     ) { innerPadding ->
@@ -168,42 +257,47 @@ fun CameraRoute(
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // A screen opened on the recordings, from an event, keeps the way back to them.
-            if (state.canRecord || mode == VideoMode.Recording) ModeSelector(state.mode, viewModel::selectMode)
-            VideoFrame { video(content) }
+            if (state.canRecord || openedOnRecordings) ModeSelector(state.mode, actions.selectMode)
+            VideoFrame(video)
             if (state.mode == VideoMode.Live) {
                 LiveControls(
                     state = state,
                     muted = muted,
-                    onMutedChange = { muted = it },
-                    onSelectStream = viewModel::selectStream,
-                    onFullscreen = { fullscreen = true },
+                    onMutedChange = actions.setMuted,
+                    onSelectStream = actions.selectStream,
+                    onFullscreen = actions.fullscreen,
                     measures = measures,
-                    onPhoto = takePhoto.takeIf { canTakePhoto },
-                    onStartClip = viewModel::startClip,
-                    onStopClip = viewModel::stopClip,
+                    onPhoto = actions.takePhoto,
+                    onStartClip = actions.startClip,
+                    onStopClip = actions.stopClip,
                 )
-                ClipStatus(state.clip, onDismiss = viewModel::clearClip)
-                state.ptz?.let {
-                    PtzPanel(it, viewModel::startMoving, viewModel::stopMoving, viewModel::goToPreset)
-                }
-            } else if (timeline != null && recordings != null) {
-                FullscreenButton { fullscreen = true }
-                RecordingsPanel(
-                    recordings,
-                    timeline,
-                    player,
-                    speed,
-                    onSpeed = { speed = it },
-                    onPhoto = takePhoto.takeIf { canTakePhoto },
-                )
+                ClipStatus(state.clip, onDismiss = actions.clearClip)
+                state.ptz?.let { PtzPanel(it, actions.startMoving, actions.stopMoving, actions.goToPreset) }
+            } else if (recordings != null) {
+                recordings()
                 // A clip still being prepared is followed from here too.
-                ClipStatus(state.clip, onDismiss = viewModel::clearClip)
+                ClipStatus(state.clip, onDismiss = actions.clearClip)
             }
             // Only administrators may change camera settings, and they do not belong with the recordings.
             if (state.mode == VideoMode.Live && state.controls.isAllowed && state.streams.isNotEmpty()) {
-                FeaturePanel(state.controls, viewModel::setFeature)
+                FeaturePanel(state.controls, actions.setFeature)
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun CameraScreenPreview() {
+    FrigateBridgeTheme {
+        CameraScreen(
+            state = CameraState(title = "Front door", live = LiveState.Playing),
+            muted = false,
+            measures = LiveMeasures(),
+            openedOnRecordings = false,
+            messages = SnackbarHostState(),
+            actions = CameraActions(),
+            video = {},
+        )
     }
 }
