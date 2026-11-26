@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.IOException
+import java.io.OutputStream
 
 /** Downloads an export from the server into the cache and offers it to other apps. */
 suspend fun Context.downloadAndShare(export: ExportedFile) {
@@ -20,13 +21,7 @@ suspend fun Context.downloadAndShare(export: ExportedFile) {
             // Only the last export is kept: videos are large.
             folder.listFiles()?.forEach { it.delete() }
             val target = File(folder, File(export.fileName).name)
-            val request = Request.Builder().url(export.url)
-            export.headers.forEach { (name, value) -> request.header(name, value) }
-            val http = OkHttpClient.Builder().acceptingCertificate(export.certificateSha256).build()
-            http.newCall(request.build()).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                target.outputStream().use { response.body.byteStream().copyTo(it) }
-            }
+            target.outputStream().use { download(export, it) }
             target
         }
     val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
@@ -36,4 +31,18 @@ suspend fun Context.downloadAndShare(export: ExportedFile) {
             .putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     startActivity(Intent.createChooser(send, null))
+}
+
+/** Copies an export from the server into [output]. Blocks: call it off the main thread. */
+fun download(
+    export: ExportedFile,
+    output: OutputStream,
+) {
+    val request = Request.Builder().url(export.url)
+    export.headers.forEach { (name, value) -> request.header(name, value) }
+    val http = OkHttpClient.Builder().acceptingCertificate(export.certificateSha256).build()
+    http.newCall(request.build()).execute().use { response ->
+        if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+        response.body.byteStream().copyTo(output)
+    }
 }

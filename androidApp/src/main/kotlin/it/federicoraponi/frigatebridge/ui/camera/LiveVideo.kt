@@ -1,5 +1,6 @@
 package it.federicoraponi.frigatebridge.ui.camera
 
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -16,14 +17,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleStartEffect
 import it.federicoraponi.frigatebridge.ui.LivePeer
+import it.federicoraponi.frigatebridge.ui.capture.ProvidesFrames
 import it.federicoraponi.frigatebridge.video.WebRtcEngine
 import it.federicoraponi.frigatebridge.video.WebRtcPeer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.compose.koinInject
+import org.webrtc.EglRenderer
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
+import kotlin.coroutines.resume
 
 private const val STATS_INTERVAL_MILLIS = 2_000L
+private const val FRAME_TIMEOUT_MILLIS = 2_000L
 
 // Short: on a network where WebRTC works the picture arrives within a second or two.
 private const val FIRST_FRAME_TIMEOUT_MILLIS = 6_000L
@@ -120,5 +127,17 @@ fun LiveVideo(
             if (measures.firstFrameMillis == null) lost()
         }
         AndroidView(factory = { renderer }, modifier = modifier)
+        if (measures.firstFrameMillis != null) ProvidesFrames { renderer.nextFrame() }
     }
 }
+
+/** The next picture the renderer draws, at the size of the video, or `null` if none comes. */
+private suspend fun SurfaceViewRenderer.nextFrame(): Bitmap? =
+    withTimeoutOrNull(FRAME_TIMEOUT_MILLIS) {
+        suspendCancellableCoroutine { continuation ->
+            // Called once, with the next frame.
+            val listener = EglRenderer.FrameListener { continuation.resume(it) }
+            addFrameListener(listener, 1f)
+            continuation.invokeOnCancellation { removeFrameListener(listener) }
+        }
+    }

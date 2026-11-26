@@ -66,6 +66,13 @@ class FakeFrigate(
             "front_door/recordings" -> respond(recordings)
             "front_door/recordings/summary" -> respond("""[{"day": "1970-01-01", "hours": []}]""")
             "review" -> respond(reviews)
+            "events/front_door/on_demand/create" ->
+                respond("""{"success":true,"message":"Created","event_id":"manual"}""")
+            "events/manual/end" -> respond("""{"success":true,"message":"Ended"}""")
+            "events/manual" -> respond("""{"id":"manual","start_time":995.5,"end_time":1020.2}""")
+            "export/front_door/start/995/end/1021" -> respond("""{"success":true,"export_id":"clip"}""")
+            "exports/clip" ->
+                respond("""{"id":"clip","video_path":"/media/frigate/exports/clip.mp4","in_progress":false}""")
             "review/moment" -> respond(MOMENT)
             "reviews/viewed" -> respond("""{"success":true,"message":"Marked"}""")
             else -> respond("", HttpStatusCode.NotFound)

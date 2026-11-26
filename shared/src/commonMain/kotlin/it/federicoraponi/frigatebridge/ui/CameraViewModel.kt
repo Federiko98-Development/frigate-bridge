@@ -12,15 +12,24 @@ import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.HttpsLiveStream
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSession
+import it.federicoraponi.frigatebridge.settings.SettingsStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 data class CameraArgs(
     val camera: CameraRef,
@@ -77,6 +86,9 @@ data class CameraState(
     val canRecord: Boolean = true,
     /** `null` for a camera that cannot be moved. */
     val ptz: PtzControls? = null,
+    val clip: ClipState = ClipState.None,
+    /** Recording on demand needs an administrator, and a camera that is recording. */
+    val canRecordClip: Boolean = false,
     /** The server or the camera does not exist any more: go back. */
     val isGone: Boolean = false,
     /** The phone has no network. */
@@ -88,8 +100,17 @@ class CameraViewModel(
     args: CameraArgs,
     private val registry: ServerRegistry,
     private val network: NetworkMonitor,
+    private val settings: SettingsStore,
 ) : ViewModel() {
     private val camera = args.camera
+    private var clipJob: Job? = null
+    private var clipLimitJob: Job? = null
+
+    // The event of the recording in progress.
+    private var clipEvent: String? = null
+
+    // The screen left the foreground before the server had started the recording.
+    private var stopWhenStarted = false
     private var liveJob: Job? = null
     private var httpsJob: Job? = null
     private var httpsFailure: VideoFailure? = null
@@ -151,7 +172,11 @@ class CameraViewModel(
             mutableState.update {
                 val read = current?.controls(snapshot.catalog.canChangeSettings)
                 val shown = if (failure != null) controls else read ?: it.controls
-                it.copy(controls = shown.copy(isApplying = false, failure = failure))
+                val records = current?.isRecording ?: false
+                it.copy(
+                    controls = shown.copy(isApplying = false, failure = failure),
+                    canRecordClip = shown.isAllowed && it.canRecord && records,
+                )
             }
         }
     }
@@ -174,10 +199,137 @@ class CameraViewModel(
 
     /** Call it when the screen leaves the foreground: stops the camera and closes the command connection. */
     fun releaseControls() {
+        if (mutableState.value.clip == ClipState.Starting) stopWhenStarted = true
+        stopClip()
         if (!ptzUsed) return
         ptzUsed = false
         registry.session(camera.serverId)?.finishPtz(camera.cameraName, stop = stopPending)
         stopPending = false
+    }
+
+    /** Starts recording a clip of the camera on the server. */
+    @OptIn(ExperimentalTime::class)
+    fun startClip() {
+        val current = mutableState.value
+        val busy = current.clip != ClipState.None && current.clip !is ClipState.Failed
+        if (!current.canRecordClip || busy) return
+        stopWhenStarted = false
+        mutableState.update { it.copy(clip = ClipState.Starting) }
+        clipJob =
+            viewModelScope.launch {
+                val session = session() ?: return@launch
+                try {
+                    // Not to be interrupted: a recording the app does not remember would never be ended.
+                    val event =
+                        withContext(NonCancellable) {
+                            val id = session.startManualRecording(camera.cameraName)
+                            settings.update { it.copy(openRecordings = it.openRecordings + openKey(id)) }
+                            // The screen may have closed while the server was starting.
+                            if (!viewModelScope.isActive) session.endManualRecording(id) { forget(openKey(id)) }
+                            id
+                        }
+                    ensureActive()
+                    clipEvent = event
+                    val now = Clock.System.now().epochSeconds
+                    mutableState.update { it.copy(clip = ClipState.Recording(now)) }
+                    clipLimitJob =
+                        viewModelScope.launch {
+                            delay(MAXIMUM_CLIP_MILLIS)
+                            stopClip()
+                        }
+                    if (stopWhenStarted) stopClip()
+                } catch (error: FrigateError) {
+                    mutableState.update { it.copy(clip = ClipState.Failed(error.toVideoFailure())) }
+                }
+            }
+    }
+
+    /** Ends the recording and prepares its file. */
+    fun stopClip() {
+        val event = clipEvent ?: return
+        val session = registry.session(camera.serverId) ?: return
+        val startedAt = (mutableState.value.clip as? ClipState.Recording)?.startedAt ?: return
+        clipEvent = null
+        clipLimitJob?.cancel()
+        // Sent at once and apart from this screen, which may be closing.
+        val ending = session.endManualRecording(event) { forget(openKey(event)) }
+        mutableState.update { it.copy(clip = ClipState.Preparing) }
+        clipJob =
+            viewModelScope.launch {
+                val refused = ending.await()
+                if (refused != null) {
+                    // Kept as open: it is tried again the next time the camera is shown.
+                    mutableState.update { it.copy(clip = ClipState.Failed(refused.toVideoFailure())) }
+                    return@launch
+                }
+                val result = prepareClip(session, event, startedAt)
+                mutableState.update { it.copy(clip = result) }
+            }
+    }
+
+    /** The file was saved, or the message about it dismissed. */
+    fun clearClip() {
+        mutableState.update {
+            val done = it.clip is ClipState.Ready || it.clip is ClipState.Failed
+            if (done) it.copy(clip = ClipState.None) else it
+        }
+    }
+
+    private suspend fun prepareClip(
+        session: ServerSession,
+        event: String,
+        startedAt: Long,
+    ): ClipState =
+        try {
+            delay(CLIP_SETTLE_MILLIS)
+            val interval = session.eventInterval(event)
+            if (interval == null) {
+                ClipState.Failed(VideoFailure(detail = "The server has not closed the recording yet"))
+            } else {
+                when (val export = session.cutExport(camera.cameraName, interval.first, interval.last)) {
+                    is ExportState.Ready -> ClipState.Ready(export.file, startedAt)
+                    is ExportState.Failed -> ClipState.Failed(export.failure)
+                    else -> ClipState.Failed(VideoFailure())
+                }
+            }
+        } catch (error: FrigateError) {
+            ClipState.Failed(error.toVideoFailure())
+        }
+
+    private fun openKey(event: String) = "${camera.serverId}/${camera.cameraName}/$event"
+
+    private suspend fun forget(key: String) {
+        settings.update { it.copy(openRecordings = it.openRecordings - key) }
+    }
+
+    /** Ends recordings of this server that were left open, e.g. because the app was closed during one. */
+    private suspend fun endLeftOverRecordings(session: ServerSession) {
+        settings.settings
+            .first()
+            .openRecordings
+            .filter { it.startsWith("${camera.serverId}/") && it.substringAfterLast('/') != clipEvent }
+            .forEach { key -> endLeftOver(session, key) }
+    }
+
+    private suspend fun endLeftOver(
+        session: ServerSession,
+        key: String,
+    ) {
+        val id = key.substringAfterLast('/')
+        val refused =
+            try {
+                // One that has an end already must not be ended again: its end would move to now.
+                if (session.eventInterval(id) == null) {
+                    session.endManualRecording(id) { forget(key) }.await()
+                } else {
+                    forget(key)
+                    null
+                }
+            } catch (error: FrigateError) {
+                error
+            }
+        // A server that answers, even to refuse, has nothing more to be told. Otherwise it is tried again later.
+        if (refused is FrigateError.UnexpectedResponse) forget(key)
     }
 
     override fun onCleared() {
@@ -339,10 +491,15 @@ class CameraViewModel(
                                 selectedStream = found.liveStreams.firstOrNull()?.name,
                                 controls = found.controls(connection.snapshot.catalog.canChangeSettings),
                                 canRecord = found.canRecord,
+                                canRecordClip =
+                                    connection.snapshot.catalog.canChangeSettings &&
+                                        found.canRecord &&
+                                        found.isRecording,
                             )
                         }
                     }
                     if (found != null) {
+                        viewModelScope.launch { endLeftOverRecordings(session) }
                         if (found.hasPtz) loadPtz(session)
                         if (mutableState.value.mode == VideoMode.Live) startLive()
                     }

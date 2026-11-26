@@ -116,6 +116,15 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 
 ## Recordings and events
 
+- A clip from the live view is Frigate's on-demand recording, as in its web interface: `POST
+  /api/events/<camera>/on_demand/create` with `duration: null`, then `PUT /api/events/<id>/end` with a JSON body, then
+  an export of the event's interval. Administrators only, and only while the camera records. An open event keeps the
+  camera's review segment open: it is ended on leaving the screen, after 5 minutes, and on the next visit if the app
+  was closed (`AppSettings.openRecordings`). An event created with a duration cannot be ended. Never end one twice: Frigate would move its end to now.
+- A player waiting for video (after a jump, or a stalled live view) shows `BufferingOverlay` over its picture.
+- Digital zoom (`ZoomableVideo`) scales only the picture, on texture views: HTTPS live view and recordings. The WebRTC
+  `SurfaceViewRenderer` is left out. Photos stay whole while zoomed.
+- Photos are taken from the video on screen (`ui/capture/`), at the stream's resolution.
 - Camera groups are chosen with `CameraGroupBar`: tap selects, holding opens the group's cameras. No extra button.
   In full screen the timeline sits in a bottom sheet that can be pulled down to its handle.
 - The timeline holds on to the starts of recordings and moments. Left in a pause, the video stops and says so;

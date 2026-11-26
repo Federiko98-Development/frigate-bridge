@@ -202,4 +202,17 @@
     <string name="settings_app_lock">App lock</string>
     <string name="settings_app_lock_hint">Asks for your fingerprint, face or screen lock when you open the app or come back to it</string>
     <string name="settings_app_lock_unavailable">Set up a screen lock on the phone first</string>
+    <string name="photo_take">Take photo</string>
+    <string name="photo_saved">Photo saved to the gallery</string>
+    <string name="photo_no_picture">There is no picture yet</string>
+    <string name="clip_start">Record a clip</string>
+    <string name="clip_stop">Stop recording</string>
+    <string name="clip_recording">Recording %1$s</string>
+    <string name="clip_preparing">Preparing the clip…</string>
+    <string name="clip_saved">Clip saved to the gallery</string>
+    <string name="clip_failed">Clip not completed</string>
+    <string name="capture_failed">Not saved: %1$s</string>
+    <string name="share">Share</string>
+    <string name="label_on_demand">Manual recording</string>
+    <string name="picture_zoom_reset">Show the whole picture</string>
 </resources>

@@ -105,6 +105,23 @@ data class ReviewDataDto(
     val zones: List<String> = emptyList(),
 )
 
+/** Frigate's answer to a request to start recording a moment. */
+@Serializable
+data class CreatedEventDto(
+    val success: Boolean = true,
+    val message: String = "",
+    @SerialName("event_id") val eventId: String? = null,
+)
+
+/** A tracked or manually recorded event, with times in seconds since the epoch. */
+@Serializable
+data class EventDto(
+    val id: String,
+    @SerialName("start_time") val startTime: Double,
+    /** `null` while the event is still going on. */
+    @SerialName("end_time") val endTime: Double? = null,
+)
+
 /** Frigate's answer to a request for an export. */
 @Serializable
 data class StartedExportDto(

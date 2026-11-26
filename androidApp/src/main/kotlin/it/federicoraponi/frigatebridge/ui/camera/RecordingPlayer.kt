@@ -40,6 +40,7 @@ import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.server.RecordingClip
 import it.federicoraponi.frigatebridge.server.acceptingCertificate
 import it.federicoraponi.frigatebridge.ui.SeekRequest
+import it.federicoraponi.frigatebridge.ui.capture.ProvidesPlayerFrames
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
@@ -118,6 +119,7 @@ fun RecordingPicture(
 ) {
     // A texture view moves with the screen during page transitions.
     ContentFrame(player = player, surfaceType = SURFACE_TYPE_TEXTURE_VIEW, modifier = modifier)
+    ProvidesPlayerFrames(player)
 }
 
 /** Play and pause. */

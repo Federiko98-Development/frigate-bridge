@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
@@ -18,6 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.media3.common.Player
@@ -42,6 +46,7 @@ fun RecordingsPanel(
     player: Player?,
     speed: Float,
     onSpeed: (Float) -> Unit,
+    onPhoto: (() -> Unit)? = null,
 ) {
     var zoom by rememberSaveable { mutableStateOf(TimelineZoom.Hour) }
     var choosingExport by rememberSaveable { mutableStateOf(false) }
@@ -83,6 +88,12 @@ fun RecordingsPanel(
                     selected = playbackSpeeds.indexOf(speed),
                     onSelect = { onSpeed(playbackSpeeds[it]) },
                 )
+                onPhoto?.let { take ->
+                    FilledTonalButton(onClick = take, shapes = ButtonDefaults.shapes()) {
+                        Icon(painterResource(R.drawable.ic_photo_camera), contentDescription = null)
+                        Text(stringResource(R.string.photo_take), modifier = Modifier.padding(start = Spacing.sm))
+                    }
+                }
                 ExportSection(state.export, onChoose = { choosingExport = true }, onDone = viewModel::clearExport)
             }
         }

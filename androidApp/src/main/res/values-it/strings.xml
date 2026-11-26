@@ -201,4 +201,17 @@
     <string name="settings_app_lock">Blocco dell’app</string>
     <string name="settings_app_lock_hint">Chiede impronta, volto o blocco schermo quando apri l’app o ci torni</string>
     <string name="settings_app_lock_unavailable">Imposta prima un blocco schermo sul telefono</string>
+    <string name="photo_take">Scatta foto</string>
+    <string name="photo_saved">Foto salvata nella galleria</string>
+    <string name="photo_no_picture">Non c’è ancora un’immagine</string>
+    <string name="clip_start">Registra una clip</string>
+    <string name="clip_stop">Ferma la registrazione</string>
+    <string name="clip_recording">Registrazione %1$s</string>
+    <string name="clip_preparing">Preparo la clip…</string>
+    <string name="clip_saved">Clip salvata nella galleria</string>
+    <string name="clip_failed">Clip non completata</string>
+    <string name="capture_failed">Non salvata: %1$s</string>
+    <string name="share">Condividi</string>
+    <string name="label_on_demand">Registrazione manuale</string>
+    <string name="picture_zoom_reset">Mostra l’immagine intera</string>
 </resources>

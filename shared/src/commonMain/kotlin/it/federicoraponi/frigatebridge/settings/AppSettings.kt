@@ -40,6 +40,11 @@ data class AppSettings(
     val savePreviewData: Boolean = true,
     /** The app asks who is using it, with a fingerprint, the face or the phone's own code. */
     val appLock: Boolean = false,
+    /**
+     * Recordings started on demand and not yet ended, as `serverId/camera/eventId`: ended later if the app was
+     * closed meanwhile, as the server would otherwise go on with them.
+     */
+    val openRecordings: Set<String> = emptySet(),
     /** Names of the cameras switched off in each group, kept by `camera/CameraSelection.kt`. */
     val hiddenCameras: Map<String, Set<String>> = emptyMap(),
 ) {

@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -163,6 +164,27 @@ class FrigateApi(
             }
         call(HttpMethod.Post, "reviews/viewed", body.toString())
     }
+
+    /**
+     * Starts recording [camera] on demand, as the web interface does: an event that stays open until [endEvent].
+     * Needs the administrator role, and recording turned on. An event with a set duration could not be ended.
+     */
+    suspend fun startManualEvent(camera: String): CreatedEventDto {
+        val body =
+            buildJsonObject {
+                put("include_recording", true)
+                put("duration", JsonNull)
+            }
+        val path = "events/${camera.encodeURLPathPart()}/on_demand/create"
+        return decode(call(HttpMethod.Post, path, body.toString()))
+    }
+
+    suspend fun endEvent(id: String) {
+        // The body is required, even with nothing in it.
+        call(HttpMethod.Put, "events/${id.encodeURLPathPart()}/end", "{}")
+    }
+
+    suspend fun event(id: String): EventDto = decode(get("events/${id.encodeURLPathPart()}"))
 
     /** Asks the server to cut a video file of an interval. It is made in the background. */
     suspend fun startExport(

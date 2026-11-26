@@ -27,14 +27,18 @@ import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +65,7 @@ import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.ui.CameraArgs
 import it.federicoraponi.frigatebridge.ui.CameraState
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
+import it.federicoraponi.frigatebridge.ui.ClipState
 import it.federicoraponi.frigatebridge.ui.LiveState
 import it.federicoraponi.frigatebridge.ui.LiveTransport
 import it.federicoraponi.frigatebridge.ui.PlaybackState
@@ -69,9 +74,16 @@ import it.federicoraponi.frigatebridge.ui.TimelineState
 import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.VideoFailure
 import it.federicoraponi.frigatebridge.ui.VideoMode
+import it.federicoraponi.frigatebridge.ui.capture.ClipButton
+import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
+import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
+import it.federicoraponi.frigatebridge.ui.capture.RecordingBadge
+import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
+import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.recordings.RecordingsPanel
 import it.federicoraponi.frigatebridge.ui.recordings.TimelineBar
 import it.federicoraponi.frigatebridge.ui.recordings.TimelineZoom
@@ -111,12 +123,12 @@ fun CameraRoute(
         }
     val recordings = timeline?.state?.collectAsStateWithLifecycle()?.value
     var speed by rememberSaveable { mutableFloatStateOf(1f) }
-    val ready = recordings?.playback as? PlaybackState.Ready
+    val playable = recordings?.playback as? PlaybackState.Ready
     val player =
-        if (timeline != null && ready != null) {
+        if (timeline != null && playable != null) {
             rememberRecordingPlayer(
-                clip = ready.clip,
-                seek = ready.seek,
+                clip = playable.clip,
+                seek = playable.seek,
                 speed = speed,
                 onPosition = timeline::playerAt,
                 onEnded = timeline::playerEnded,
@@ -125,11 +137,28 @@ fun CameraRoute(
         } else {
             null
         }
+    val captures = rememberCaptures()
+    val canTakePhoto =
+        if (state.mode == VideoMode.Live) state.live == LiveState.Playing else player != null
+    // A recording is named after the moment on screen, the live view after now.
+    val takePhoto = {
+        val live = state.mode == VideoMode.Live
+        val time = if (live) System.currentTimeMillis() / 1_000 else recordings?.time ?: 0
+        captures.takePhoto(state.title, time)
+    }
+    // A finished clip is saved as soon as the server has it.
+    val ready = state.clip as? ClipState.Ready
+    LaunchedEffect(ready) {
+        if (ready != null) {
+            captures.saveClip(ready.file, state.title, ready.startedAt)
+            viewModel.clearClip()
+        }
+    }
     // The video moves between the page and full screen without being rebuilt, so it keeps playing.
     val video =
         remember {
             movableContentOf { content: VideoContent ->
-                Video(content, viewModel)
+                CompositionLocalProvider(LocalFrameCapture provides captures.frames) { Video(content, viewModel) }
             }
         }
     val content =
@@ -153,6 +182,8 @@ fun CameraRoute(
             onExit = { fullscreen = false },
             viewModel = viewModel,
             hasAudio = measures.hasAudio != false,
+            messages = captures.messages,
+            onPhoto = takePhoto.takeIf { canTakePhoto },
             recordings = {
                 if (timeline != null && recordings != null) {
                     FullscreenTimeline(recordings, timeline, player)
@@ -162,6 +193,7 @@ fun CameraRoute(
         return
     }
     Scaffold(
+        snackbarHost = { SnackbarHost(captures.messages) },
         topBar = {
             TopAppBar(
                 title = { ScreenTitle(state.title) },
@@ -197,13 +229,26 @@ fun CameraRoute(
                     onSelectStream = viewModel::selectStream,
                     onFullscreen = { fullscreen = true },
                     measures = measures,
+                    onPhoto = takePhoto.takeIf { canTakePhoto },
+                    onStartClip = viewModel::startClip,
+                    onStopClip = viewModel::stopClip,
                 )
+                ClipStatus(state.clip, onDismiss = viewModel::clearClip)
                 state.ptz?.let {
                     PtzPanel(it, viewModel::startMoving, viewModel::stopMoving, viewModel::goToPreset)
                 }
             } else if (timeline != null && recordings != null) {
                 FullscreenButton { fullscreen = true }
-                RecordingsPanel(recordings, timeline, player, speed, onSpeed = { speed = it })
+                RecordingsPanel(
+                    recordings,
+                    timeline,
+                    player,
+                    speed,
+                    onSpeed = { speed = it },
+                    onPhoto = takePhoto.takeIf { canTakePhoto },
+                )
+                // A clip still being prepared is followed from here too.
+                ClipStatus(state.clip, onDismiss = viewModel::clearClip)
             }
             // Only administrators may change camera settings, and they do not belong with the recordings.
             if (state.mode == VideoMode.Live && state.controls.isAllowed && state.streams.isNotEmpty()) {
@@ -232,7 +277,14 @@ private fun Video(
     viewModel: CameraViewModel,
 ) {
     val state = content.state
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    // The WebRTC picture is drawn on a surface of its own, which cannot be magnified this way.
+    val zoomable =
+        if (state.mode == VideoMode.Live) {
+            state.live == LiveState.Playing && state.httpsStream != null
+        } else {
+            content.playback is PlaybackState.Ready
+        }
+    ZoomableVideo(resetKey = state.mode to state.selectedStream, enabled = zoomable) { picture ->
         when (state.mode) {
             VideoMode.Live -> {
                 val stream = state.selectedStream
@@ -246,7 +298,7 @@ private fun Video(
                         onPlaying = viewModel::livePlaying,
                         onFailed = { viewModel.liveFailed(VideoFailure(detail = it)) },
                         onMeasures = content.onMeasures,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = picture,
                     )
                 } else if (stream != null &&
                     live !is LiveState.Failed &&
@@ -276,7 +328,10 @@ private fun Video(
             VideoMode.Recording ->
                 when (val playback = content.playback) {
                     is PlaybackState.Ready ->
-                        content.player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
+                        content.player?.let {
+                            RecordingPicture(it, picture)
+                            BufferingOverlay(it)
+                        }
                     PlaybackState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
                     is PlaybackState.Gap -> RecordingGap(playback, content.onSkipRecording)
                     is PlaybackState.Failed ->
@@ -323,6 +378,8 @@ private fun FullscreenCamera(
     onExit: () -> Unit,
     viewModel: CameraViewModel,
     hasAudio: Boolean,
+    messages: SnackbarHostState,
+    onPhoto: (() -> Unit)?,
     recordings: @Composable () -> Unit,
     video: @Composable () -> Unit,
 ) {
@@ -335,6 +392,11 @@ private fun FullscreenCamera(
                 modifier = Modifier.align(Alignment.TopEnd),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
+                // The button stays while a recording is on, also if the camera stops allowing new ones.
+                if (state.mode == VideoMode.Live && (state.canRecordClip || state.clip is ClipState.Recording)) {
+                    ClipButton(state.clip, viewModel::startClip, viewModel::stopClip)
+                }
+                onPhoto?.let { PhotoButton(it) }
                 if (state.mode == VideoMode.Live && hasAudio) MuteButton(muted, onMutedChange)
                 FilledTonalIconButton(onClick = onExit, shapes = IconButtonDefaults.shapes()) {
                     Icon(
@@ -346,6 +408,10 @@ private fun FullscreenCamera(
             if (state.mode == VideoMode.Live && state.streams.size > 1) {
                 StreamChoice(state, viewModel::selectStream, Modifier.align(Alignment.TopStart))
             }
+            (state.clip as? ClipState.Recording)?.let {
+                RecordingBadge(it.startedAt, Modifier.align(Alignment.TopCenter))
+            }
+            SnackbarHost(messages, Modifier.align(Alignment.Center))
             val ptz = state.ptz
             if (state.mode == VideoMode.Live && ptz != null) {
                 if (ptz.canPanAndTilt) {
@@ -398,6 +464,9 @@ private fun LiveControls(
     onSelectStream: (String) -> Unit,
     onFullscreen: () -> Unit,
     measures: LiveMeasures,
+    onPhoto: (() -> Unit)?,
+    onStartClip: () -> Unit,
+    onStopClip: () -> Unit,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
@@ -406,6 +475,10 @@ private fun LiveControls(
         if (state.streams.size > 1) StreamChoice(state, onSelectStream)
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
             if (measures.hasAudio != false) MuteButton(muted, onMutedChange)
+            onPhoto?.let { PhotoButton(it) }
+            if (state.canRecordClip || state.clip is ClipState.Recording) {
+                ClipButton(state.clip, onStartClip, onStopClip)
+            }
             FullscreenButton(onFullscreen)
         }
         if (state.live == LiveState.Playing) {
@@ -425,6 +498,31 @@ private fun LiveControls(
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** What is happening with the clip being recorded. */
+@Composable
+private fun ClipStatus(
+    clip: ClipState,
+    onDismiss: () -> Unit,
+) {
+    when (clip) {
+        is ClipState.Recording -> RecordingBadge(clip.startedAt)
+        ClipState.Preparing, is ClipState.Ready -> {
+            Text(stringResource(R.string.clip_preparing), style = MaterialTheme.typography.bodyMedium)
+            LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        is ClipState.Failed -> {
+            val problem = clip.failure.problem
+            val text = if (problem != null) problemText(problem) else stringResource(R.string.clip_failed)
+            NoticeCard(
+                message = listOfNotNull(text, clip.failure.detail).joinToString("\n"),
+                actionLabel = stringResource(R.string.close),
+                onAction = onDismiss,
+            )
+        }
+        ClipState.None, ClipState.Starting -> Unit
     }
 }
 

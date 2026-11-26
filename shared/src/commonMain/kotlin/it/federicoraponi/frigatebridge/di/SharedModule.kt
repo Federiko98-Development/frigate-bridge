@@ -36,7 +36,7 @@ val sharedModule =
         viewModelOf(::LockViewModel)
         viewModelOf(::EventsViewModel)
         viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
-        viewModel { parameters -> CameraViewModel(parameters.get(), get(), get()) }
+        viewModel { parameters -> CameraViewModel(parameters.get(), get(), get(), get()) }
         viewModel { parameters -> TimelineViewModel(parameters.get(), get(), get()) }
         viewModel { parameters -> EventViewModel(parameters.get(), get(), get()) }
     }

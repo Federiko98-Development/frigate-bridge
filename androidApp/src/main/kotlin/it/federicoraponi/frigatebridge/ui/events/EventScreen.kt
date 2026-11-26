@@ -23,10 +23,13 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +57,7 @@ import it.federicoraponi.frigatebridge.ui.EventState
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.ExportState
 import it.federicoraponi.frigatebridge.ui.PlaybackState
+import it.federicoraponi.frigatebridge.ui.camera.BufferingOverlay
 import it.federicoraponi.frigatebridge.ui.camera.Failure
 import it.federicoraponi.frigatebridge.ui.camera.FullscreenButton
 import it.federicoraponi.frigatebridge.ui.camera.LandscapeFullscreen
@@ -61,7 +65,11 @@ import it.federicoraponi.frigatebridge.ui.camera.PlayButton
 import it.federicoraponi.frigatebridge.ui.camera.RecordingPicture
 import it.federicoraponi.frigatebridge.ui.camera.SkipButton
 import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
+import it.federicoraponi.frigatebridge.ui.camera.ZoomableVideo
 import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
+import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
+import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
+import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
@@ -109,18 +117,29 @@ fun EventRoute(
         view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
     }
+    val captures = rememberCaptures()
+    val takePhoto =
+        player?.let { current ->
+            {
+                // The video starts a little before the moment itself.
+                val time = (ready?.clip?.startTime ?: 0) + current.currentPosition / 1_000
+                captures.takePhoto(state.cameraName, time)
+            }
+        }
     // The video moves between the page and full screen without being rebuilt, so it keeps playing.
     val video =
         remember {
             movableContentOf { shown: EventState, current: Player?, retry: () -> Unit ->
-                EventVideo(shown, current, retry)
+                CompositionLocalProvider(LocalFrameCapture provides captures.frames) {
+                    EventVideo(shown, current, retry)
+                }
             }
         }
     val picture: @Composable () -> Unit = { video(state, player, viewModel::retry) }
     if (fullscreen) {
         BackHandler { fullscreen = false }
         LandscapeFullscreen()
-        FullscreenEvent(player, onExit = { fullscreen = false }) { picture() }
+        FullscreenEvent(player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
     } else {
         EventScreen(
             state = state,
@@ -130,6 +149,8 @@ fun EventRoute(
             onOpenTimeline = { onOpenTimeline(it.camera, it.start - LEAD_SECONDS) },
             onExport = viewModel::export,
             onExportDone = viewModel::clearExport,
+            messages = captures.messages,
+            onPhoto = takePhoto,
             video = { picture() },
         )
     }
@@ -145,8 +166,11 @@ private fun EventScreen(
     onExport: () -> Unit,
     onExportDone: () -> Unit,
     video: @Composable BoxScope.() -> Unit,
+    messages: SnackbarHostState = remember { SnackbarHostState() },
+    onPhoto: (() -> Unit)? = null,
 ) {
     Scaffold(
+        snackbarHost = { SnackbarHost(messages) },
         topBar = {
             TopAppBar(
                 // The camera is not known yet, or the server no longer has the moment.
@@ -180,6 +204,7 @@ private fun EventScreen(
                 SkipButton(R.string.video_back_10) { player?.seekBy(-SKIP_SECONDS) }
                 PlayButton(player)
                 SkipButton(R.string.video_forward_10) { player?.seekBy(SKIP_SECONDS) }
+                onPhoto?.let { PhotoButton(it) }
             }
             FullscreenButton(onFullscreen)
             state.item?.let { item ->
@@ -210,9 +235,13 @@ private fun EventVideo(
     player: Player?,
     onRetry: () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    ZoomableVideo(resetKey = null, enabled = state.playback is PlaybackState.Ready) { picture ->
         when (val playback = state.playback) {
-            is PlaybackState.Ready -> player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
+            is PlaybackState.Ready ->
+                player?.let {
+                    RecordingPicture(it, picture)
+                    BufferingOverlay(it)
+                }
             is PlaybackState.Failed ->
                 Failure(playback.failure, R.string.video_failed, onRetry, state.isOffline)
             // A moment's video is always asked for whole: it has no cursor to leave in a pause.
@@ -224,22 +253,27 @@ private fun EventVideo(
 @Composable
 private fun FullscreenEvent(
     player: Player?,
+    messages: SnackbarHostState,
+    onPhoto: (() -> Unit)?,
     onExit: () -> Unit,
     video: @Composable () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         video()
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.lg)) {
-            FilledTonalIconButton(
-                onClick = onExit,
-                shapes = IconButtonDefaults.shapes(),
+            Row(
                 modifier = Modifier.align(Alignment.TopEnd),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                Icon(
-                    painterResource(R.drawable.ic_fullscreen_exit),
-                    contentDescription = stringResource(R.string.video_exit_fullscreen),
-                )
+                onPhoto?.let { PhotoButton(it) }
+                FilledTonalIconButton(onClick = onExit, shapes = IconButtonDefaults.shapes()) {
+                    Icon(
+                        painterResource(R.drawable.ic_fullscreen_exit),
+                        contentDescription = stringResource(R.string.video_exit_fullscreen),
+                    )
+                }
             }
+            SnackbarHost(messages, Modifier.align(Alignment.Center))
             PlayButton(player, Modifier.align(Alignment.BottomCenter))
         }
     }

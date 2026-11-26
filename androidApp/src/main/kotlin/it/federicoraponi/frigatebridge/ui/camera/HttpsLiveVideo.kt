@@ -29,6 +29,7 @@ import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import it.federicoraponi.frigatebridge.server.HttpsLiveStream
 import it.federicoraponi.frigatebridge.server.acceptingCertificate
+import it.federicoraponi.frigatebridge.ui.capture.ProvidesPlayerFrames
 import it.federicoraponi.frigatebridge.video.LiveRenderersFactory
 import it.federicoraponi.frigatebridge.video.WebSocketDataSource
 import kotlinx.coroutines.delay
@@ -171,6 +172,9 @@ fun HttpsLiveVideo(
                     }
                 }
                 ContentFrame(player = current, surfaceType = SURFACE_TYPE_TEXTURE_VIEW, modifier = modifier)
+                if (rendered) ProvidesPlayerFrames(current)
+                // Before the first picture of all, the screen shows its own indicator.
+                if (rendered || reconnections > 0) BufferingOverlay(current)
             }
         }
     }

@@ -271,6 +271,8 @@ internal fun labelName(label: String): String {
     val known =
         mapOf(
             "person" to R.string.label_person,
+            // Frigate's name for a clip recorded by hand.
+            "on_demand" to R.string.label_on_demand,
             "car" to R.string.label_car,
             "dog" to R.string.label_dog,
             "cat" to R.string.label_cat,

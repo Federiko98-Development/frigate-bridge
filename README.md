@@ -17,6 +17,8 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 - Recordings on a timeline with a date picker, alerts and detections filtered by date, time, camera and object, export and sharing of clips
 - A page for each alert or detection with its video, reachable from a link of another app
 - Keeps what it shows without a network, and reconnects when the phone changes network
+- Pinch to magnify the picture of the live view and of recordings
+- Photos from the live view and from recordings, and clips recorded from the live view, saved to the gallery
 - An optional app lock with fingerprint, face or screen lock
 - Camera groups, where each camera can be switched on or off
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion

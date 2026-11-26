@@ -20,8 +20,10 @@ import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.recordings.recordingDay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.ceil
 
 data class ServerSnapshot(
     /** The address that answered. */
@@ -252,6 +255,40 @@ class ServerSession(
     suspend fun markReviewed(ids: List<String>) = connectedApi().markReviewed(ids)
 
     suspend fun mediaFile(serverPath: String): ByteArray = connectedApi().mediaFile(serverPath)
+
+    /** Starts recording a camera on demand and returns the identifier of the event, to end it with. */
+    suspend fun startManualRecording(camera: String): String {
+        val created = connectedApi().startManualEvent(camera)
+        return created.eventId?.takeIf { created.success }
+            ?: throw FrigateError.UnexpectedResponse(created.message.ifBlank { "the recording was not started" })
+    }
+
+    /**
+     * Ends a recording started on demand. It goes on in the background, so that it is ended even while the screen
+     * that started it is being destroyed. [onEnded] runs there too, once the server has accepted: ending an event
+     * again would move its end to that later moment, so whoever remembers it must forget it at once. The result is
+     * why the server did not end it, or `null`.
+     */
+    fun endManualRecording(
+        eventId: String,
+        onEnded: suspend () -> Unit = {},
+    ): Deferred<FrigateError?> =
+        background.async {
+            try {
+                connectedApi().endEvent(eventId)
+                onEnded()
+                null
+            } catch (error: FrigateError) {
+                error
+            }
+        }
+
+    /** The first and last second of a recorded event, or `null` while the server has not closed it yet. */
+    suspend fun eventInterval(eventId: String): LongRange? {
+        val event = connectedApi().event(eventId)
+        val end = event.endTime ?: return null
+        return event.startTime.toLong()..ceil(end).toLong()
+    }
 
     /** Asks the server for a video file of an interval and returns the identifier of the export. */
     suspend fun startExport(
