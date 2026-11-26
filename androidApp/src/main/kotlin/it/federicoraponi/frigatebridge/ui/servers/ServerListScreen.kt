@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -60,6 +60,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.LocalNetworkNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.MenuEntry
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
@@ -77,6 +78,7 @@ data class ServerListActions(
     val remove: (String) -> Unit = {},
     val refresh: () -> Unit = {},
     val allowLocalNetwork: () -> Unit = {},
+    val openSettings: () -> Unit = {},
 )
 
 @Composable
@@ -84,6 +86,7 @@ fun ServerListRoute(
     onOpenCameras: () -> Unit,
     onAddServer: () -> Unit,
     onEditServer: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: ServerListViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -104,6 +107,7 @@ fun ServerListRoute(
                 remove = viewModel::remove,
                 refresh = viewModel::refresh,
                 allowLocalNetwork = allowLocalNetwork,
+                openSettings = onOpenSettings,
             ),
     )
 }
@@ -126,8 +130,8 @@ fun ServerListScreen(
             TopAppBar(
                 title = { ScreenTitle(stringResource(R.string.servers_title)) },
                 actions = {
-                    IconButton(onClick = actions.refresh, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh))
+                    IconButton(onClick = actions.openSettings, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -138,30 +142,33 @@ fun ServerListScreen(
             if (state.servers.isNotEmpty()) AddServerButton(actions.add)
         },
     ) { innerPadding ->
-        val content = Modifier.padding(innerPadding)
-        when {
-            state.isLoading -> LoadingContent(content)
-            state.servers.isEmpty() ->
-                MessageState(
-                    icon = Icons.Filled.Home,
-                    title = stringResource(R.string.servers_empty_title),
-                    message = stringResource(R.string.servers_empty_message),
-                    modifier = content,
-                ) {
-                    PrimaryButton(
-                        text = stringResource(R.string.server_add),
-                        onClick = actions.add,
-                        leading = { Icon(Icons.Filled.Add, contentDescription = null) },
+        RefreshableContent(
+            isRefreshing = state.isRefreshing,
+            onRefresh = actions.refresh,
+            modifier = Modifier.padding(innerPadding),
+        ) {
+            when {
+                state.isLoading -> LoadingContent()
+                state.servers.isEmpty() ->
+                    MessageState(
+                        icon = Icons.Filled.Home,
+                        title = stringResource(R.string.servers_empty_title),
+                        message = stringResource(R.string.servers_empty_message),
+                    ) {
+                        PrimaryButton(
+                            text = stringResource(R.string.server_add),
+                            onClick = actions.add,
+                            leading = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        )
+                    }
+                else ->
+                    ServerList(
+                        servers = state.servers,
+                        actions = actions,
+                        onRemove = { removing = it },
+                        localNetworkBlocked = localNetworkBlocked,
                     )
-                }
-            else ->
-                ServerList(
-                    servers = state.servers,
-                    actions = actions,
-                    onRemove = { removing = it },
-                    localNetworkBlocked = localNetworkBlocked,
-                    modifier = content,
-                )
+            }
         }
     }
     state.servers.firstOrNull { it.id == removing }?.let { server ->

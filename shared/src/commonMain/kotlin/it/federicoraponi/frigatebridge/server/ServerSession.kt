@@ -2,16 +2,24 @@ package it.federicoraponi.frigatebridge.server
 
 import io.ktor.client.HttpClient
 import it.federicoraponi.frigatebridge.camera.CameraCatalog
+import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.camera.cameraCatalog
 import it.federicoraponi.frigatebridge.frigate.Credentials
 import it.federicoraponi.frigatebridge.frigate.FrigateApi
 import it.federicoraponi.frigatebridge.frigate.FrigateError
+import it.federicoraponi.frigatebridge.frigate.FrigateSocket
+import it.federicoraponi.frigatebridge.frigate.PtzInfoDto
 import it.federicoraponi.frigatebridge.frigate.TokenStore
 import it.federicoraponi.frigatebridge.frigate.isSupportedFrigateVersion
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -67,6 +75,11 @@ class ServerSession(
 ) {
     private val apis = server.addresses.map { url -> url to FrigateApi(http, url, credentials, tokens) }
     private val refreshMutex = Mutex()
+    private val socketMutex = Mutex()
+    private var socket: FrigateSocket? = null
+
+    // Outlives the screens, so that a camera is stopped even while its screen is being destroyed.
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutableState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = mutableState.asStateFlow()
 
@@ -99,6 +112,61 @@ class ServerSession(
         return HttpsLiveStream(api.mp4StreamUrl(stream), api.authorizationHeaders(), server.certificateSha256)
     }
 
+    /** Turns a camera function on or off and reads the server again. */
+    suspend fun setCameraFeature(
+        camera: String,
+        feature: CameraFeature,
+        enabled: Boolean,
+    ) {
+        connectedApi().setCameraFeature(camera, feature.apiName, enabled)
+        refresh()
+    }
+
+    suspend fun ptzInfo(camera: String): PtzInfoDto = connectedApi().ptzInfo(camera)
+
+    /** Sends a movement command such as `MOVE_LEFT`, `STOP` or `preset_<name>`. */
+    suspend fun sendPtz(
+        camera: String,
+        command: String,
+    ) = socketMutex.withLock {
+        val open = socket?.takeIf { it.isOpen } ?: connectedApi().openSocket().also { socket = it }
+        try {
+            open.publish("$camera/ptz", command)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            // The connection dropped while idle: one more try on a new one, so that a STOP is not lost.
+            val fresh = connectedApi().openSocket().also { socket = it }
+            fresh.publish("$camera/ptz", command)
+        }
+    }
+
+    /**
+     * Ends the use of the command connection, stopping [camera] first if a movement may still be running. Frigate
+     * streams all its events on that connection, so it must not stay open.
+     */
+    fun finishPtz(
+        camera: String,
+        stop: Boolean,
+    ) {
+        background.launch {
+            if (stop) {
+                try {
+                    sendPtz(camera, "STOP")
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    // Nothing else can be done once the server is unreachable.
+                }
+            }
+            socketMutex.withLock {
+                val open = socket
+                socket = null
+                open?.close()
+            }
+        }
+    }
+
     /** The most recent picture of a camera, as a small JPEG. */
     suspend fun latestFrame(
         camera: String,
@@ -129,6 +197,9 @@ class ServerSession(
     }
 
     fun close() {
+        socket?.cancel()
+        socket = null
+        background.cancel()
         http.close()
     }
 

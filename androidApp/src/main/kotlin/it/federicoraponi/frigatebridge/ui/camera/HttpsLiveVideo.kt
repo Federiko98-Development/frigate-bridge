@@ -43,10 +43,11 @@ private const val STALL_TIMEOUT_MILLIS = 8_000L
 private const val MAX_RECONNECTIONS = 3
 
 // The more video is waiting in the buffer, the further behind the picture is: play faster until it shrinks.
-private const val TARGET_BUFFERED_MILLIS = 700L
-private const val FAR_BEHIND_MILLIS = 2_000L
-private const val CATCH_UP_SPEED = 1.15f
-private const val FAST_CATCH_UP_SPEED = 1.5f
+// Below the first limit nothing is sped up: the stream arrives in bursts, and emptying the buffer makes it stop.
+private const val TARGET_BUFFERED_MILLIS = 2_000L
+private const val FAR_BEHIND_MILLIS = 5_000L
+private const val CATCH_UP_SPEED = 1.05f
+private const val FAST_CATCH_UP_SPEED = 1.3f
 
 /**
  * A live stream carried over HTTPS. Like the WebRTC view, it runs only while on screen and in the foreground.
@@ -94,7 +95,7 @@ fun HttpsLiveVideo(
                         .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(0))
                         .createMediaSource(MediaItem.fromUri(source.url))
                 // Small buffers: this is a live view.
-                val buffers = DefaultLoadControl.Builder().setBufferDurationsMs(1_000, 5_000, 250, 500).build()
+                val buffers = DefaultLoadControl.Builder().setBufferDurationsMs(1_500, 8_000, 500, 1_000).build()
                 val current =
                     ExoPlayer
                         .Builder(context, LiveRenderersFactory(context))
@@ -118,7 +119,8 @@ fun HttpsLiveVideo(
                         }
 
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            if (isPlaying) Log.d(TAG, "https: playing, audio=${measures.hasAudio}")
+                            val buffered = player?.totalBufferedDuration
+                            Log.d(TAG, "https: playing=$isPlaying audio=${measures.hasAudio} buffered=$buffered")
                         }
 
                         override fun onPlayerError(error: PlaybackException) {

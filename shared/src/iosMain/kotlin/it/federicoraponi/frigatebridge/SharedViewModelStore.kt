@@ -13,6 +13,7 @@ import it.federicoraponi.frigatebridge.ui.CamerasViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
+import it.federicoraponi.frigatebridge.ui.SettingsViewModel
 import it.federicoraponi.frigatebridge.ui.StartViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform
@@ -29,6 +30,8 @@ class SharedViewModelStore : ViewModelStoreOwner {
     fun serverListViewModel(): ServerListViewModel = resolve { KoinPlatform.getKoin().get() }
 
     fun camerasViewModel(): CamerasViewModel = resolve { KoinPlatform.getKoin().get() }
+
+    fun settingsViewModel(): SettingsViewModel = resolve { KoinPlatform.getKoin().get() }
 
     fun serverFormViewModel(serverId: String?): ServerFormViewModel =
         resolve { KoinPlatform.getKoin().get { parametersOf(ServerFormArgs(serverId)) } }

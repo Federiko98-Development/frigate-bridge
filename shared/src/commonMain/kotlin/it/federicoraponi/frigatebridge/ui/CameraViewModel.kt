@@ -2,6 +2,7 @@ package it.federicoraponi.frigatebridge.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.camera.LiveStream
 import it.federicoraponi.frigatebridge.frigate.FrigateError
@@ -12,6 +13,7 @@ import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +24,7 @@ import kotlin.time.ExperimentalTime
 
 data class CameraArgs(
     val camera: CameraRef,
+    val mode: VideoMode = VideoMode.Live,
 )
 
 enum class VideoMode {
@@ -85,6 +88,9 @@ data class CameraState(
     /** What to play when [transport] is HTTPS; `null` while it is being prepared. */
     val httpsStream: HttpsLiveStream? = null,
     val recording: RecordingState = RecordingState.Loading,
+    val controls: CameraControls = CameraControls(),
+    /** `null` for a camera that cannot be moved. */
+    val ptz: PtzControls? = null,
     /** The server or the camera does not exist any more: go back. */
     val isGone: Boolean = false,
 )
@@ -99,11 +105,106 @@ class CameraViewModel(
     private var recordingJob: Job? = null
     private var httpsJob: Job? = null
     private var httpsFailure: VideoFailure? = null
-    private val mutableState = MutableStateFlow(CameraState(title = camera.cameraName))
+
+    // One command at a time and in order, so that a STOP never overtakes its movement.
+    private val ptzCommands = Channel<String>(Channel.UNLIMITED)
+    private var ptzUsed = false
+
+    // A movement was asked for and no STOP has reached the server since.
+    private var stopPending = false
+    private val mutableState = MutableStateFlow(CameraState(title = camera.cameraName, mode = args.mode))
     val state: StateFlow<CameraState> = mutableState.asStateFlow()
 
     init {
         loadCamera()
+        viewModelScope.launch {
+            for (command in ptzCommands) {
+                try {
+                    session()?.sendPtz(camera.cameraName, command)
+                    if (command == STOP) stopPending = false
+                } catch (error: FrigateError) {
+                    mutableState.update { it.copy(controls = it.controls.copy(failure = error.toFailure())) }
+                }
+            }
+        }
+    }
+
+    fun setFeature(
+        feature: CameraFeature,
+        enabled: Boolean,
+    ) {
+        val controls = mutableState.value.controls
+        if (!controls.isAllowed || controls.isApplying || feature !in controls.switchable) return
+        val wanted = if (enabled) controls.enabled + feature else controls.enabled - feature
+        // Shown at once; the server's answer then replaces it.
+        mutableState.update {
+            it.copy(controls = controls.copy(enabled = wanted, isApplying = true, failure = null))
+        }
+        viewModelScope.launch {
+            val session = session() ?: return@launch
+            var failure: VideoFailure? = null
+            try {
+                session.setCameraFeature(camera.cameraName, feature, enabled)
+            } catch (error: FrigateError) {
+                failure = error.toFailure()
+            }
+            val snapshot = (session.state.value as? ConnectionState.Connected)?.snapshot
+            val current = snapshot?.catalog?.cameras?.firstOrNull { it.ref == camera }
+            mutableState.update {
+                val read = current?.controls(snapshot.catalog.canChangeSettings)
+                val shown = if (failure != null) controls else read ?: it.controls
+                it.copy(controls = shown.copy(isApplying = false, failure = failure))
+            }
+        }
+    }
+
+    /** Starts moving the camera; it keeps going until [stopMoving]. */
+    fun startMoving(move: PtzMove) {
+        ptzUsed = true
+        stopPending = true
+        ptzCommands.trySend(move.command)
+    }
+
+    fun stopMoving() {
+        ptzCommands.trySend(STOP)
+    }
+
+    fun goToPreset(name: String) {
+        ptzUsed = true
+        ptzCommands.trySend("preset_$name")
+    }
+
+    /** Call it when the screen leaves the foreground: stops the camera and closes the command connection. */
+    fun releaseControls() {
+        if (!ptzUsed) return
+        ptzUsed = false
+        registry.session(camera.serverId)?.finishPtz(camera.cameraName, stop = stopPending)
+        stopPending = false
+    }
+
+    override fun onCleared() {
+        releaseControls()
+    }
+
+    private fun loadPtz(session: ServerSession) {
+        viewModelScope.launch {
+            val info =
+                try {
+                    session.ptzInfo(camera.cameraName)
+                } catch (_: FrigateError) {
+                    // Without it the camera simply shows no movement controls.
+                    return@launch
+                }
+            val ptz =
+                PtzControls(
+                    canPanAndTilt = "pt" in info.features,
+                    canZoom = "zoom" in info.features,
+                    presets = info.presets,
+                )
+            if (ptz.canPanAndTilt || ptz.canZoom || ptz.presets.isNotEmpty()) {
+                mutableState.update { it.copy(ptz = ptz) }
+            }
+        }
     }
 
     fun selectMode(mode: VideoMode) {
@@ -230,10 +331,14 @@ class CameraViewModel(
                                 title = found.displayName,
                                 streams = found.liveStreams,
                                 selectedStream = found.liveStreams.firstOrNull()?.name,
+                                controls = found.controls(connection.snapshot.catalog.canChangeSettings),
                             )
                         }
                     }
-                    if (found != null) startLive()
+                    if (found != null) {
+                        if (found.hasPtz) loadPtz(session)
+                        if (mutableState.value.mode == VideoMode.Live) startLive() else loadRecording()
+                    }
                 }
                 is ConnectionState.Failed -> liveFailed(connection.error.toFailure())
                 ConnectionState.Idle, ConnectionState.Connecting -> Unit
@@ -272,3 +377,5 @@ class CameraViewModel(
 
     private fun FrigateError.toFailure() = VideoFailure(toProblem(), (this as? FrigateError.UnexpectedResponse)?.detail)
 }
+
+private const val STOP = "STOP"

@@ -1,6 +1,7 @@
 package it.federicoraponi.frigatebridge.frigate
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
@@ -69,6 +70,31 @@ class FrigateApi(
     suspend fun userProfile(): UserProfileDto = decode(get("profile"))
 
     suspend fun config(): ConfigDto = decode(get("config"))
+
+    /** Turns a function of a camera on or off, until Frigate restarts. Needs the administrator role. */
+    suspend fun setCameraFeature(
+        camera: String,
+        feature: String,
+        enabled: Boolean,
+    ) {
+        val body = buildJsonObject { put("value", if (enabled) "ON" else "OFF") }
+        call(HttpMethod.Put, "camera/${camera.encodeURLPathPart()}/set/$feature", body.toString())
+    }
+
+    /** Empty when the camera cannot be moved. */
+    suspend fun ptzInfo(camera: String): PtzInfoDto = decode(get("${camera.encodeURLPathPart()}/ptz/info"))
+
+    /** Opens the WebSocket, logging in again first if the token has expired. */
+    suspend fun openSocket(): FrigateSocket {
+        val headers = authorizationHeaders()
+        return transport {
+            FrigateSocket(
+                http.webSocketSession("${baseUrl.trimEnd('/')}/ws".replaceFirst("http", "ws")) {
+                    headers.forEach { (name, value) -> header(name, value) }
+                },
+            )
+        }
+    }
 
     suspend fun stats(): StatsDto = decode(get("stats"))
 
@@ -209,6 +235,8 @@ class FrigateApi(
                 this.method = method
                 if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
                 if (method != HttpMethod.Get) header("X-CSRF-TOKEN", "1")
+                // The proxy caches answers for a few seconds, which would hide a setting just changed.
+                if (path == "config") header("X-Cache-Bypass", "1")
                 if (jsonBody != null) setBody(TextContent(jsonBody, ContentType.Application.Json))
             }
         }

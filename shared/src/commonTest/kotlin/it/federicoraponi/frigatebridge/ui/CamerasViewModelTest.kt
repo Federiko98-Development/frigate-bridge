@@ -19,7 +19,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
             assertEquals(listOf("front_door", "garage"), viewModel.cameras("home").names())
 
             viewModel.switchTo("office")
@@ -35,7 +35,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
             viewModel.cameras("home")
 
             viewModel.selectGroup("Outside")
@@ -52,7 +52,7 @@ class CamerasViewModelTest : ViewModelTest() {
             fixture.saveBoth()
             fixture.registry.activate("home")
             fixture.home.online = false
-            val viewModel = CamerasViewModel(fixture.registry)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
             val failed = viewModel.state.first { it.content is CamerasContent.Failed }
             assertEquals(CamerasContent.Failed(ConnectionProblem.Unreachable), failed.content)
 
@@ -67,7 +67,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings)
             viewModel.cameras("home")
 
             fixture.registry.remove("home")

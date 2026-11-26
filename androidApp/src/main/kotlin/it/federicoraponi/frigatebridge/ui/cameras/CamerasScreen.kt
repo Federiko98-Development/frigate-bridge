@@ -1,17 +1,14 @@
 package it.federicoraponi.frigatebridge.ui.cameras
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -19,10 +16,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
@@ -30,24 +27,20 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -61,6 +54,7 @@ import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.camera.Camera
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.frigate.MINIMUM_FRIGATE_VERSION
+import it.federicoraponi.frigatebridge.settings.HomeLayout
 import it.federicoraponi.frigatebridge.ui.CamerasContent
 import it.federicoraponi.frigatebridge.ui.CamerasState
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
@@ -73,6 +67,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.MenuEntry
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
@@ -90,6 +85,7 @@ data class CamerasActions(
     val allowLocalNetwork: () -> Unit = {},
     val openCamera: (CameraRef) -> Unit = {},
     val previews: CameraPreviews = CameraPreviews.None,
+    val toggleLayout: () -> Unit = {},
 )
 
 @Composable
@@ -97,6 +93,7 @@ fun CamerasRoute(
     onShowServers: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenCamera: (CameraRef) -> Unit,
+    bottomBar: @Composable () -> Unit = {},
     viewModel: CamerasViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -106,8 +103,11 @@ fun CamerasRoute(
     LaunchedEffect(state.content) {
         if (state.content == CamerasContent.NoServer) onShowServers()
     }
+    val context = LocalContext.current
+    val settings = state.settings
     CamerasScreen(
         state = state,
+        bottomBar = bottomBar,
         localNetworkBlocked =
             !localNetwork.isGranted && state.content == CamerasContent.Failed(ConnectionProblem.Unreachable),
         actions =
@@ -119,7 +119,14 @@ fun CamerasRoute(
                 editServer = onEditServer,
                 allowLocalNetwork = allowLocalNetwork,
                 openCamera = onOpenCamera,
-                previews = CameraPreviews(viewModel::cachedPreview, viewModel::loadPreview),
+                previews =
+                    CameraPreviews(
+                        cached = viewModel::cachedPreview,
+                        load = viewModel::loadPreview,
+                        interval = { settings.previewIntervalMillis(context.isOnMeteredNetwork()) },
+                        refreshKey = Triple(settings.previewRefresh, settings.savePreviewData, state.reloads),
+                    ),
+                toggleLayout = viewModel::toggleLayout,
             ),
     )
 }
@@ -130,16 +137,16 @@ fun CamerasScreen(
     actions: CamerasActions,
     modifier: Modifier = Modifier,
     localNetworkBlocked: Boolean = false,
+    bottomBar: @Composable () -> Unit = {},
 ) {
     Scaffold(
         modifier = modifier,
+        bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = { ServerSwitcher(state, actions) },
                 actions = {
-                    IconButton(onClick = actions.retry, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh))
-                    }
+                    LayoutButton(state.settings.homeLayout, actions.toggleLayout)
                 },
             )
         },
@@ -149,29 +156,53 @@ fun CamerasScreen(
             if (localNetworkBlocked) {
                 LocalNetworkNotice(actions.allowLocalNetwork, Modifier.padding(Spacing.lg))
             }
-            when (val content = state.content) {
-                CamerasContent.Loading, CamerasContent.NoServer -> LoadingContent()
-                is CamerasContent.Failed ->
-                    MessageState(
-                        icon = Icons.Filled.Warning,
-                        title = problemText(content.problem),
-                        isError = true,
-                    ) {
-                        PrimaryButton(text = stringResource(R.string.retry), onClick = actions.retry)
-                        TextButton(
-                            onClick = { state.server?.let { actions.editServer(it.id) } },
-                            shapes = ButtonDefaults.shapes(),
-                        ) { Text(stringResource(R.string.server_edit)) }
-                    }
-                is CamerasContent.Ready -> CameraGrid(content, actions.openCamera, actions.previews)
+            RefreshableContent(isRefreshing = state.isRefreshing, onRefresh = actions.retry) {
+                when (val content = state.content) {
+                    CamerasContent.Loading, CamerasContent.NoServer -> LoadingContent()
+                    is CamerasContent.Failed ->
+                        MessageState(
+                            icon = Icons.Filled.Warning,
+                            title = problemText(content.problem),
+                            isError = true,
+                        ) {
+                            PrimaryButton(text = stringResource(R.string.retry), onClick = actions.retry)
+                            TextButton(
+                                onClick = { state.server?.let { actions.editServer(it.id) } },
+                                shapes = ButtonDefaults.shapes(),
+                            ) { Text(stringResource(R.string.server_edit)) }
+                        }
+                    is CamerasContent.Ready ->
+                        CameraGrid(content, state.settings.homeLayout, actions.openCamera, actions.previews)
+                }
             }
+        }
+    }
+}
+
+/** Switches between the grid and one camera below the other. The icon shows what a tap gives. */
+@Composable
+private fun LayoutButton(
+    layout: HomeLayout,
+    onToggle: () -> Unit,
+) {
+    IconButton(onClick = onToggle, shapes = IconButtonDefaults.shapes()) {
+        if (layout == HomeLayout.Grid) {
+            Icon(
+                Icons.AutoMirrored.Filled.List,
+                contentDescription = stringResource(R.string.cameras_show_list),
+            )
+        } else {
+            Icon(
+                painterResource(R.drawable.ic_grid_view),
+                contentDescription = stringResource(R.string.cameras_show_grid),
+            )
         }
     }
 }
 
 /** The name of the server on screen; tapping it moves to another one. */
 @Composable
-private fun ServerSwitcher(
+internal fun ServerSwitcher(
     state: CamerasState,
     actions: CamerasActions,
 ) {
@@ -264,6 +295,7 @@ private fun GroupSelector(
 @Composable
 private fun CameraGrid(
     content: CamerasContent.Ready,
+    layout: HomeLayout,
     onOpen: (CameraRef) -> Unit,
     previews: CameraPreviews,
 ) {
@@ -272,7 +304,7 @@ private fun CameraGrid(
         return
     }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 160.dp),
+        columns = if (layout == HomeLayout.Grid) GridCells.Adaptive(minSize = 160.dp) else GridCells.Fixed(1),
         contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -284,70 +316,6 @@ private fun CameraGrid(
         }
         items(content.cameras, key = { it.ref.cameraName }) { camera ->
             CameraCard(camera, previews, onClick = { onOpen(camera.ref) }, modifier = Modifier.animateItem())
-        }
-    }
-}
-
-@Composable
-private fun CameraCard(
-    camera: Camera,
-    previews: CameraPreviews,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-        shape = MaterialTheme.shapes.large,
-        color = colors.surfaceContainer,
-    ) {
-        Column(modifier = Modifier.padding(Spacing.xs)) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
-                shape = MaterialTheme.shapes.medium,
-                color = colors.surfaceContainerHighest,
-            ) {
-                val picture = if (camera.enabled) previewPicture(camera.ref, previews) else null
-                if (picture != null) {
-                    Image(
-                        bitmap = picture,
-                        // The camera's name is written under the picture.
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Box(contentAlignment = Alignment.Center) {
-                        Surface(
-                            shape = MaterialShapes.Cookie9Sided.toShape(),
-                            color = if (camera.enabled) colors.primaryContainer else colors.surfaceContainerHigh,
-                            contentColor =
-                                if (camera.enabled) colors.onPrimaryContainer else colors.onSurfaceVariant,
-                        ) {
-                            Icon(
-                                painterResource(R.drawable.ic_videocam),
-                                contentDescription = null,
-                                modifier = Modifier.padding(Spacing.sm).size(20.dp),
-                            )
-                        }
-                    }
-                }
-            }
-            Column(modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.sm)) {
-                Text(
-                    camera.displayName,
-                    style = MaterialTheme.typography.titleSmallEmphasized,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                // Always one line high, so that the cards of a row line up.
-                Text(
-                    if (camera.enabled) "" else stringResource(R.string.camera_disabled),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
         }
     }
 }

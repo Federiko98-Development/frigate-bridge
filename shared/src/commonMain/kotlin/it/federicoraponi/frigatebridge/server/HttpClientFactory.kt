@@ -3,6 +3,7 @@ package it.federicoraponi.frigatebridge.server
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.websocket.WebSockets
 
 /** Creates the HTTP client of one server, so that an accepted certificate applies to that server only. */
 fun interface HttpClientFactory {
@@ -13,6 +14,7 @@ fun interface HttpClientFactory {
 internal fun HttpClientConfig<*>.configureForFrigate() {
     expectSuccess = false
     followRedirects = false
+    install(WebSockets)
     install(HttpTimeout) {
         // Short, so that an unreachable local address gives way quickly to the alternative one.
         connectTimeoutMillis = 5_000

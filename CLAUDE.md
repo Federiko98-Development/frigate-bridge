@@ -41,6 +41,9 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Buttons and icon buttons use the shape-morphing `shapes` overloads; accents use `MaterialShapes`.
 - Choices between a few options are connected `ToggleButton` groups; menus use `ExpressiveMenu`.
 - `ContainedLoadingIndicator`, bottom sheets for decisions that need explanation.
+- Inside a server a bottom bar (`MainTabBar`) switches tabs, with a plain fade (never scale a screen); each tab screen places it in
+  its own `Scaffold`, so it moves with the page when something opens on top. Back from a tab returns to cameras.
+- Screens that read a server refresh by dragging down (`RefreshableContent`); there is no refresh button.
 - Compact sizes: standard top app bars, default or small buttons and FAB, titles no larger than `titleLarge`.
   Medium and large variants looked oversized on a real phone (384dp wide).
 - Every `NavHost` sets all transitions, including `predictivePopEnterTransition` and
@@ -54,6 +57,11 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - `/api/version` requires authentication behind the proxy, so it doubles as the login probe.
 - Login returns 404 when authentication is disabled, and 429 when rate limited.
 - A camera group's `cameras` is a list or a comma-separated string.
+- `PUT /api/camera/<name>/set/<feature>` with `{"value": "ON"|"OFF"}` needs the admin role and lasts until
+  Frigate restarts. Motion cannot be turned off while detection is on; recording cannot be turned on if the
+  configuration disables it. `/api/config` is cached by the proxy for 5 s: send `X-Cache-Bypass`.
+- Movement goes over the WebSocket `/ws` as `{"topic": "<camera>/ptz", "payload": "MOVE_LEFT"}`, ended by `STOP`;
+  `GET /api/<camera>/ptz/info` lists features (`pt`, `zoom`) and presets.
 - The self-signed certificate does not name the server's address.
 - WebRTC signalling is one request: `POST /api/go2rtc/webrtc?src=<stream>` with a JSON offer, answered with a
   JSON answer. Media then flows to go2rtc's candidates (port 8555). No STUN server is used by the app.
@@ -90,6 +98,8 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   player (Media3 ExoPlayer, with the server's accepted certificate).
 - G.711 camera audio arrives from go2rtc as uncompressed FLAC that Android's decoders cannot play (sample
   numbers are coded wrongly). the renderer in `video/LiveRenderersFactory.kt` reads it.
+- The video composable is `movableContentOf`, and the activity handles rotation itself, so entering full screen
+  does not restart the stream.
 - A live connection exists only while its video is on screen and the app is in the foreground.
 - Live view order, as in Frigate's web interface: go2rtc's fragmented MP4 over HTTPS first (about 1 s to the
   first frame), WebRTC only if that fails (it needs port 8555 reachable). The protocol on `/live/mse/api/ws`: send `{"type":"mse","value":"<codecs>"}`, receive one text message with

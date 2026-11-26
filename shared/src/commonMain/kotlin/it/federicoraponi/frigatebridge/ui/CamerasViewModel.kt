@@ -9,6 +9,9 @@ import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.RegistryState
 import it.federicoraponi.frigatebridge.server.Server
 import it.federicoraponi.frigatebridge.server.ServerRegistry
+import it.federicoraponi.frigatebridge.settings.AppSettings
+import it.federicoraponi.frigatebridge.settings.HomeLayout
+import it.federicoraponi.frigatebridge.settings.SettingsStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ServerSummary(
@@ -54,22 +58,34 @@ data class CamerasState(
     /** `null` means "all cameras". */
     val selectedGroup: String? = null,
     val content: CamerasContent = CamerasContent.Loading,
+    val settings: AppSettings = AppSettings(),
+    /** The user asked to read the server again and it has not answered yet. */
+    val isRefreshing: Boolean = false,
+    /** Grows after every refresh, so that the pictures are loaded again too. */
+    val reloads: Int = 0,
 )
 
 /** The cameras of the active server, and only of that one. */
 class CamerasViewModel(
     private val registry: ServerRegistry,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
     private val selectedGroup = MutableStateFlow<GroupSelection?>(null)
+
+    private val refresh = MutableStateFlow(RefreshProgress())
 
     // Kept so that the grid is not empty when the user comes back to it.
     private val previews = mutableMapOf<CameraRef, ByteArray>()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<CamerasState> =
-        registry.state
-            .flatMapLatest { activeServer(it) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), CamerasState())
+        combine(
+            registry.state.flatMapLatest { activeServer(it) },
+            settingsStore.settings,
+            refresh,
+        ) { cameras, settings, progress ->
+            cameras.copy(settings = settings, isRefreshing = progress.running, reloads = progress.done)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), CamerasState())
 
     init {
         viewModelScope.launch {
@@ -91,9 +107,27 @@ class CamerasViewModel(
         viewModelScope.launch { registry.activate(serverId) }
     }
 
+    fun toggleLayout() {
+        viewModelScope.launch {
+            settingsStore.update {
+                it.copy(homeLayout = if (it.homeLayout == HomeLayout.Grid) HomeLayout.List else HomeLayout.Grid)
+            }
+        }
+    }
+
+    /** Reads the active server again: cameras, groups, state and pictures. */
     fun retry() {
         val serverId = registry.state.value?.activeServerId ?: return
-        viewModelScope.launch { registry.session(serverId)?.refresh() }
+        if (refresh.value.running) return
+        refresh.update { it.copy(running = true) }
+        viewModelScope.launch {
+            try {
+                visibleRefresh { registry.session(serverId)?.refresh() }
+                refresh.update { it.copy(done = it.done + 1) }
+            } finally {
+                refresh.update { it.copy(running = false) }
+            }
+        }
     }
 
     /** The last picture loaded for [camera], if any. */
@@ -151,6 +185,11 @@ class CamerasViewModel(
     }
 
     private fun Server.summary() = ServerSummary(id, name, colorIndex)
+
+    private data class RefreshProgress(
+        val running: Boolean = false,
+        val done: Int = 0,
+    )
 
     private data class GroupSelection(
         val serverId: String,

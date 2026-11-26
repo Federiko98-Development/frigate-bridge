@@ -1,7 +1,7 @@
 package it.federicoraponi.frigatebridge.ui.camera
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -11,14 +11,15 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,12 +27,12 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,11 +44,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.ui.CameraArgs
@@ -58,6 +59,7 @@ import it.federicoraponi.frigatebridge.ui.LiveTransport
 import it.federicoraponi.frigatebridge.ui.RecordingState
 import it.federicoraponi.frigatebridge.ui.VideoFailure
 import it.federicoraponi.frigatebridge.ui.VideoMode
+import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
@@ -65,26 +67,63 @@ import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-/** One camera: its live view, or the last minute it recorded. */
+/** One camera: its live view, or the last minute it recorded, with its controls. */
 @Composable
 fun CameraRoute(
     camera: CameraRef,
     onClose: () -> Unit,
-    viewModel: CameraViewModel = koinViewModel { parametersOf(CameraArgs(camera)) },
+    mode: VideoMode = VideoMode.Live,
+    viewModel: CameraViewModel = koinViewModel { parametersOf(CameraArgs(camera, mode)) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var muted by rememberSaveable { mutableStateOf(false) }
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
     var measures by remember { mutableStateOf(LiveMeasures()) }
     LaunchedEffect(state.isGone) {
         if (state.isGone) onClose()
     }
+    LifecycleStartEffect(viewModel) { onStopOrDispose { viewModel.releaseControls() } }
     // The screen stays on while a camera is being watched.
     val view = LocalView.current
     DisposableEffect(view) {
         view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
     }
+    val recording = state.recording
+    val player =
+        if (state.mode == VideoMode.Recording && recording is RecordingState.Ready) {
+            rememberRecordingPlayer(recording.clip, onError = viewModel::recordingFailed)
+        } else {
+            null
+        }
+    // The video moves between the page and full screen without being rebuilt, so it keeps playing.
+    val video =
+        remember {
+            movableContentOf { content: VideoContent ->
+                Video(content, viewModel)
+            }
+        }
+    val content =
+        VideoContent(
+            state = state,
+            muted = muted,
+            player = player,
+            onMeasures = { measures = it },
+        )
 
+    if (fullscreen) {
+        BackHandler { fullscreen = false }
+        LandscapeFullscreen()
+        FullscreenCamera(
+            state = state,
+            muted = muted,
+            onMutedChange = { muted = it },
+            onExit = { fullscreen = false },
+            viewModel = viewModel,
+            hasAudio = measures.hasAudio != false,
+        ) { video(content) }
+        return
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -111,70 +150,146 @@ fun CameraRoute(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             ModeSelector(state.mode, viewModel::selectMode)
-            when (state.mode) {
-                VideoMode.Live -> {
-                    VideoFrame {
-                        val stream = state.selectedStream
-                        val live = state.live
-                        val httpsStream = state.httpsStream
-                        if (httpsStream != null && live !is LiveState.Failed) {
-                            HttpsLiveVideo(
-                                source = httpsStream,
-                                connectionKey = stream to state.liveAttempt,
-                                muted = muted,
-                                onPlaying = viewModel::livePlaying,
-                                onFailed = { viewModel.liveFailed(VideoFailure(detail = it)) },
-                                onMeasures = { measures = it },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else if (stream != null &&
-                            live !is LiveState.Failed &&
-                            state.transport == LiveTransport.WebRtc
-                        ) {
-                            LiveVideo(
-                                connectionKey = stream to state.liveAttempt,
-                                muted = muted,
-                                onConnect = {
-                                    measures = LiveMeasures()
-                                    viewModel.connectLive(it)
-                                },
-                                onDisconnect = viewModel::stopLive,
-                                onPlaying = viewModel::livePlaying,
-                                onLost = { viewModel.liveFailed() },
-                                onMeasures = { measures = it },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                        when (live) {
-                            LiveState.Connecting -> ContainedLoadingIndicator()
-                            is LiveState.Failed ->
-                                Failure(live.failure, R.string.video_failed, viewModel::retry)
-                            LiveState.Playing -> Unit
-                        }
-                    }
-                    LiveControls(state, muted, { muted = it }, viewModel::selectStream, measures)
+            VideoFrame { video(content) }
+            if (state.mode == VideoMode.Live) {
+                LiveControls(
+                    state = state,
+                    muted = muted,
+                    onMutedChange = { muted = it },
+                    onSelectStream = viewModel::selectStream,
+                    onFullscreen = { fullscreen = true },
+                    measures = measures,
+                )
+                state.ptz?.let {
+                    PtzPanel(it, viewModel::startMoving, viewModel::stopMoving, viewModel::goToPreset)
                 }
-                VideoMode.Recording -> Recording(state.recording, viewModel)
+            } else {
+                if (player != null && recording is RecordingState.Ready) {
+                    RecordingControls(recording.clip, player)
+                }
+                FullscreenButton { fullscreen = true }
             }
+            if (state.streams.isNotEmpty()) FeaturePanel(state.controls, viewModel::setFeature)
         }
     }
 }
 
+/** What the video area needs to know. */
+private data class VideoContent(
+    val state: CameraState,
+    val muted: Boolean,
+    val player: Player?,
+    val onMeasures: (LiveMeasures) -> Unit,
+)
+
+/** The picture, live or recorded, with its loading and failure messages. */
 @Composable
-private fun Recording(
-    recording: RecordingState,
+private fun Video(
+    content: VideoContent,
     viewModel: CameraViewModel,
 ) {
-    if (recording is RecordingState.Ready) {
-        val player = rememberRecordingPlayer(recording.clip, onError = viewModel::recordingFailed)
-        VideoFrame { RecordingPicture(player, Modifier.fillMaxSize()) }
-        RecordingControls(recording.clip, player)
-    } else {
-        VideoFrame {
-            when (recording) {
-                RecordingState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
-                is RecordingState.Failed -> Failure(recording.failure, R.string.video_failed, viewModel::retry)
-                else -> ContainedLoadingIndicator()
+    val state = content.state
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        when (state.mode) {
+            VideoMode.Live -> {
+                val stream = state.selectedStream
+                val live = state.live
+                val httpsStream = state.httpsStream
+                if (httpsStream != null && live !is LiveState.Failed) {
+                    HttpsLiveVideo(
+                        source = httpsStream,
+                        connectionKey = stream to state.liveAttempt,
+                        muted = content.muted,
+                        onPlaying = viewModel::livePlaying,
+                        onFailed = { viewModel.liveFailed(VideoFailure(detail = it)) },
+                        onMeasures = content.onMeasures,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (stream != null &&
+                    live !is LiveState.Failed &&
+                    state.transport == LiveTransport.WebRtc
+                ) {
+                    LiveVideo(
+                        connectionKey = stream to state.liveAttempt,
+                        muted = content.muted,
+                        onConnect = {
+                            content.onMeasures(LiveMeasures())
+                            viewModel.connectLive(it)
+                        },
+                        onDisconnect = viewModel::stopLive,
+                        onPlaying = viewModel::livePlaying,
+                        onLost = { viewModel.liveFailed() },
+                        onMeasures = content.onMeasures,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                when (live) {
+                    LiveState.Connecting -> ContainedLoadingIndicator()
+                    is LiveState.Failed -> Failure(live.failure, R.string.video_failed, viewModel::retry)
+                    LiveState.Playing -> Unit
+                }
+            }
+            VideoMode.Recording ->
+                when (val recording = state.recording) {
+                    is RecordingState.Ready ->
+                        content.player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
+                    RecordingState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
+                    is RecordingState.Failed -> Failure(recording.failure, R.string.video_failed, viewModel::retry)
+                    RecordingState.Loading -> ContainedLoadingIndicator()
+                }
+        }
+    }
+}
+
+/** The video over the whole sideways screen, with the controls on top of it. */
+@Composable
+private fun FullscreenCamera(
+    state: CameraState,
+    muted: Boolean,
+    onMutedChange: (Boolean) -> Unit,
+    onExit: () -> Unit,
+    viewModel: CameraViewModel,
+    hasAudio: Boolean,
+    video: @Composable () -> Unit,
+) {
+    val overlay = Color.Black.copy(alpha = 0.45f)
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        video()
+        Box(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.lg)) {
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                if (state.mode == VideoMode.Live) MuteButton(muted, onMutedChange, hasAudio)
+                FilledTonalIconButton(onClick = onExit, shapes = IconButtonDefaults.shapes()) {
+                    Icon(
+                        painterResource(R.drawable.ic_fullscreen_exit),
+                        contentDescription = stringResource(R.string.video_exit_fullscreen),
+                    )
+                }
+            }
+            val ptz = state.ptz
+            if (state.mode == VideoMode.Live && ptz != null) {
+                if (ptz.canPanAndTilt) {
+                    DirectionPad(
+                        viewModel::startMoving,
+                        viewModel::stopMoving,
+                        modifier = Modifier.align(Alignment.BottomEnd),
+                        buttonSize = 48.dp,
+                        container = overlay,
+                        content = Color.White,
+                    )
+                }
+                if (ptz.canZoom) {
+                    ZoomButtons(
+                        viewModel::startMoving,
+                        viewModel::stopMoving,
+                        modifier = Modifier.align(Alignment.BottomStart),
+                        buttonSize = 48.dp,
+                        container = overlay,
+                        content = Color.White,
+                    )
+                }
             }
         }
     }
@@ -249,6 +364,7 @@ private fun LiveControls(
     muted: Boolean,
     onMutedChange: (Boolean) -> Unit,
     onSelectStream: (String) -> Unit,
+    onFullscreen: () -> Unit,
     measures: LiveMeasures,
 ) {
     Column(
@@ -262,16 +378,9 @@ private fun LiveControls(
                 onSelect = { onSelectStream(state.streams[it].name) },
             )
         }
-        FilledTonalIconToggleButton(
-            enabled = measures.hasAudio != false,
-            checked = muted,
-            onCheckedChange = onMutedChange,
-            shapes = IconButtonDefaults.toggleableShapes(),
-        ) {
-            Icon(
-                painterResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume_on),
-                contentDescription = stringResource(if (muted) R.string.video_unmute else R.string.video_mute),
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+            MuteButton(muted, onMutedChange, measures.hasAudio != false)
+            FullscreenButton(onFullscreen)
         }
         if (state.live == LiveState.Playing) {
             val transport =
@@ -293,30 +402,29 @@ private fun LiveControls(
     }
 }
 
-/** A connected group of toggle buttons, of which exactly one is selected. */
 @Composable
-private fun ConnectedChoice(
-    labels: List<String>,
-    selected: Int,
-    onSelect: (Int) -> Unit,
+private fun MuteButton(
+    muted: Boolean,
+    onMutedChange: (Boolean) -> Unit,
+    enabled: Boolean,
 ) {
-    Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+    FilledTonalIconToggleButton(
+        enabled = enabled,
+        checked = muted,
+        onCheckedChange = onMutedChange,
+        shapes = IconButtonDefaults.toggleableShapes(),
     ) {
-        labels.forEachIndexed { index, label ->
-            ToggleButton(
-                checked = index == selected,
-                onCheckedChange = { onSelect(index) },
-                shapes =
-                    when (index) {
-                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                        labels.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                    },
-                contentPadding = ButtonDefaults.ContentPadding,
-                modifier = Modifier.semantics { role = Role.RadioButton },
-            ) { Text(label) }
-        }
+        Icon(
+            painterResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume_on),
+            contentDescription = stringResource(if (muted) R.string.video_unmute else R.string.video_mute),
+        )
+    }
+}
+
+@Composable
+private fun FullscreenButton(onClick: () -> Unit) {
+    FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes()) {
+        Icon(painterResource(R.drawable.ic_fullscreen), contentDescription = null)
+        Text(stringResource(R.string.video_fullscreen), modifier = Modifier.padding(start = Spacing.sm))
     }
 }

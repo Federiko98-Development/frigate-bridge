@@ -6,7 +6,9 @@ import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.RegistryState
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -28,16 +30,20 @@ data class ServerListItem(
 data class ServerListState(
     val isLoading: Boolean = true,
     val servers: List<ServerListItem> = emptyList(),
+    /** The user asked to check the servers again and not all have answered yet. */
+    val isRefreshing: Boolean = false,
 )
 
 class ServerListViewModel(
     private val registry: ServerRegistry,
 ) : ViewModel() {
+    private val refreshing = MutableStateFlow(false)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<ServerListState> =
-        registry.state
-            .flatMapLatest { items(it) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ServerListState())
+        combine(registry.state.flatMapLatest { items(it) }, refreshing) { list, running ->
+            list.copy(isRefreshing = running)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), ServerListState())
 
     init {
         viewModelScope.launch {
@@ -53,9 +59,20 @@ class ServerListViewModel(
     }
 
     fun refresh() {
-        registry.state.value?.servers.orEmpty().forEach { server ->
-            val session = registry.session(server.id) ?: return@forEach
-            viewModelScope.launch { session.refresh() }
+        if (refreshing.value) return
+        val sessions =
+            registry.state.value
+                ?.servers
+                .orEmpty()
+                .mapNotNull { registry.session(it.id) }
+        refreshing.value = true
+        viewModelScope.launch {
+            try {
+                // All at once: a slow server does not hold back the others.
+                visibleRefresh { coroutineScope { sessions.forEach { launch { it.refresh() } } } }
+            } finally {
+                refreshing.value = false
+            }
         }
     }
 

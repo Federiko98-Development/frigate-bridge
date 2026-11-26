@@ -17,7 +17,25 @@ data class Camera(
     val onDashboard: Boolean,
     /** The streams that can be watched live, the first being the preferred one. */
     val liveStreams: List<LiveStream> = emptyList(),
+    val isRecording: Boolean = false,
+    val isDetecting: Boolean = false,
+    val isDetectingMotion: Boolean = false,
+    val isSavingSnapshots: Boolean = false,
+    /** `false` when recording is disabled in the configuration file and cannot be turned on from here. */
+    val canRecord: Boolean = true,
+    /** The camera may be movable; the server tells what it supports. */
+    val hasPtz: Boolean = false,
 )
+
+/** A function of a camera that the app can turn on and off. [apiName] is Frigate's name for it. */
+enum class CameraFeature(
+    val apiName: String,
+) {
+    Detection("detect"),
+    Recording("recordings"),
+    Snapshots("snapshots"),
+    Motion("motion"),
+}
 
 data class LiveStream(
     val label: String,
@@ -33,6 +51,8 @@ data class CameraGroup(
 data class CameraCatalog(
     val cameras: List<Camera> = emptyList(),
     val groups: List<CameraGroup> = emptyList(),
+    /** Frigate lets only administrators change camera settings. */
+    val canChangeSettings: Boolean = false,
 ) {
     /** The cameras of the group called [groupName], or those of the "all cameras" view when it is `null`. */
     fun camerasIn(groupName: String?): List<Camera> {
@@ -64,6 +84,12 @@ fun cameraCatalog(
                         camera.live.streams
                             .map { (label, stream) -> LiveStream(label, stream) }
                             .ifEmpty { listOf(LiveStream(name, name)) },
+                    isRecording = camera.record.enabled,
+                    isDetecting = camera.detect.enabled,
+                    isDetectingMotion = camera.motion.enabled,
+                    isSavingSnapshots = camera.snapshots.enabled,
+                    canRecord = camera.record.enabledInConfig != false,
+                    hasPtz = camera.onvif.host.isNotBlank(),
                 )
             }
     val visible = cameras.map { it.ref.cameraName }.toSet()
@@ -73,5 +99,5 @@ fun cameraCatalog(
             .map { (name, group) ->
                 CameraGroup(name, group.cameras.filter { it in visible }.map { CameraRef(serverId, it) })
             }.filter { it.cameras.isNotEmpty() }
-    return CameraCatalog(cameras, groups)
+    return CameraCatalog(cameras, groups, canChangeSettings = profile.role == "admin")
 }

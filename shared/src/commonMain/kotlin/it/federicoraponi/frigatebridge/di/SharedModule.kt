@@ -4,10 +4,13 @@ import it.federicoraponi.frigatebridge.server.DataStoreServerStore
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSessionFactory
 import it.federicoraponi.frigatebridge.server.ServerStore
+import it.federicoraponi.frigatebridge.settings.DataStoreSettingsStore
+import it.federicoraponi.frigatebridge.settings.SettingsStore
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
+import it.federicoraponi.frigatebridge.ui.SettingsViewModel
 import it.federicoraponi.frigatebridge.ui.StartViewModel
 import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
@@ -19,11 +22,13 @@ import org.koin.dsl.module
 val sharedModule =
     module {
         single<ServerStore> { DataStoreServerStore(get()) }
+        single<SettingsStore> { DataStoreSettingsStore(get()) }
         single { ServerSessionFactory(get(), get()) }
         single { ServerRegistry(get(), get(), get()) }
         viewModelOf(::StartViewModel)
         viewModelOf(::ServerListViewModel)
         viewModelOf(::CamerasViewModel)
+        viewModelOf(::SettingsViewModel)
         viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
         viewModel { parameters -> CameraViewModel(parameters.get(), get()) }
     }

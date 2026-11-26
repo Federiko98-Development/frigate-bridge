@@ -15,13 +15,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-// Often enough to look alive, rare enough for a grid of cameras on mobile data.
-private const val REFRESH_MILLIS = 1_500L
-
 /** Where the pictures of the camera grid come from. */
 class CameraPreviews(
     val cached: (CameraRef) -> ByteArray?,
     val load: suspend (CameraRef) -> ByteArray?,
+    /** The pause before the next picture, or `null` to load only one. */
+    val interval: () -> Long? = { null },
+    /** Changing it starts loading again, e.g. after the refresh setting changed. */
+    val refreshKey: Any = Unit,
 ) {
     companion object {
         val None = CameraPreviews({ null }, { null })
@@ -40,15 +41,14 @@ fun previewPicture(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val source by rememberUpdatedState(previews)
     val picture by
-        produceState<ImageBitmap?>(null, camera, lifecycle) {
+        produceState<ImageBitmap?>(null, camera, lifecycle, previews.refreshKey) {
             source.cached(camera)?.let { value = decode(it) }
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                while (true) {
-                    val bytes = source.load(camera)
-                    val loaded = bytes?.let { decode(it) }
-                    if (loaded != null) value = loaded
-                    delay(REFRESH_MILLIS)
-                }
+                do {
+                    source.load(camera)?.let { bytes -> decode(bytes)?.let { value = it } }
+                    val pause = source.interval()
+                    if (pause != null) delay(pause)
+                } while (pause != null)
             }
         }
     return picture

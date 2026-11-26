@@ -3,6 +3,10 @@ package it.federicoraponi.frigatebridge.server
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import it.federicoraponi.frigatebridge.frigate.FakeFrigate
+import it.federicoraponi.frigatebridge.settings.AppSettings
+import it.federicoraponi.frigatebridge.settings.SettingsStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MemoryServerStore(
     var saved: SavedServers = SavedServers(),
@@ -24,6 +28,15 @@ class FakeSecretStore : SecretStore {
         value: String?,
     ) {
         if (value == null) values.remove(key) else values[key] = value
+    }
+}
+
+class MemorySettingsStore : SettingsStore {
+    private val values = MutableStateFlow(AppSettings())
+    override val settings: Flow<AppSettings> = values
+
+    override suspend fun update(change: (AppSettings) -> AppSettings) {
+        values.value = change(values.value)
     }
 }
 
@@ -68,6 +81,7 @@ class Fixture {
     val secrets = FakeSecretStore()
     val sessions = ServerSessionFactory(network, secrets)
     val registry = ServerRegistry(store, secrets, sessions)
+    val settings = MemorySettingsStore()
 
     val homeServer = Server("home", "Home", "https://home.example.com", username = "viewer")
     val officeServer = Server("office", "Office", "https://office.example.com", username = "boss")

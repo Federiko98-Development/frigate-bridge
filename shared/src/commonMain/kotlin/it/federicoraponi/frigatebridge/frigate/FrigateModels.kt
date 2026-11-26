@@ -27,6 +27,32 @@ data class CameraConfigDto(
     val enabled: Boolean = true,
     val ui: CameraUiDto = CameraUiDto(),
     val live: CameraLiveDto = CameraLiveDto(),
+    val record: FeatureDto = FeatureDto(),
+    val detect: FeatureDto = FeatureDto(),
+    val motion: FeatureDto = FeatureDto(),
+    val snapshots: FeatureDto = FeatureDto(),
+    val onvif: OnvifDto = OnvifDto(),
+)
+
+@Serializable
+data class OnvifDto(
+    /** Set when the camera can be controlled through ONVIF, e.g. to move it. */
+    val host: String = "",
+)
+
+/** What a camera that can be moved supports: `pt` (pan and tilt), `zoom`, `focus`, … */
+@Serializable
+data class PtzInfoDto(
+    val features: List<String> = emptyList(),
+    val presets: List<String> = emptyList(),
+)
+
+/** A function of a camera that can be turned on and off. */
+@Serializable
+data class FeatureDto(
+    val enabled: Boolean = false,
+    /** Frigate only turns recording on at run time if the configuration file enables it. */
+    @SerialName("enabled_in_config") val enabledInConfig: Boolean? = null,
 )
 
 @Serializable
