@@ -18,13 +18,11 @@ import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,15 +32,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.camera.GroupChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
 
 @Composable
 private fun groupName(name: String?) = name?.replace('_', ' ') ?: stringResource(R.string.cameras_all)
@@ -68,8 +71,18 @@ fun CameraGroupBar(
     ) {
         choices.forEachIndexed { index, choice ->
             val count = "${choice.shown.size}/${choice.cameras.size}"
+            val name = groupName(choice.name)
+            val shown =
+                pluralStringResource(
+                    R.plurals.cameras_shown_count,
+                    choice.cameras.size,
+                    choice.shown.size,
+                    choice.cameras.size,
+                )
             GroupButton(
-                label = groupName(choice.name) + if (choice.isPartial) " · $count" else "",
+                label = name + if (choice.isPartial) " · $count" else "",
+                // "3/5" read aloud says less than "3 of 5 cameras shown".
+                description = if (choice.isPartial) "$name, $shown" else name,
                 isSelected = choice.name == selected,
                 index = index,
                 count = choices.size,
@@ -97,6 +110,7 @@ fun CameraGroupBar(
 @Composable
 private fun GroupButton(
     label: String,
+    description: String,
     isSelected: Boolean,
     index: Int,
     count: Int,
@@ -126,13 +140,16 @@ private fun GroupButton(
                     onLongClickLabel = longClickLabel,
                     onLongClick = onLongClick,
                     onClick = onClick,
-                ).semantics { selected = isSelected },
+                ).semantics {
+                    selected = isSelected
+                    contentDescription = description
+                },
     ) {
         Box(
             modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = Spacing.lg),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clearAndSetSemantics {})
         }
     }
 }
@@ -149,22 +166,14 @@ private fun CameraSheet(
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState =
-            rememberBottomSheetState(
-                initialValue = SheetValue.Hidden,
-                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-            ),
+        sheetState = rememberFullSheetState(),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg).padding(bottom = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    groupName(choice.name),
-                    style = MaterialTheme.typography.titleLargeEmphasized,
-                    modifier = Modifier.weight(1f).padding(start = Spacing.sm),
-                )
+                SheetTitle(groupName(choice.name), modifier = Modifier.weight(1f).padding(start = Spacing.sm))
                 TextButton(
                     onClick = { shown = names.toSet() },
                     enabled = !shown.containsAll(names),

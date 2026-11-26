@@ -18,14 +18,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
@@ -33,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecureTextField
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +38,6 @@ import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +70,7 @@ import it.federicoraponi.frigatebridge.ui.FormError
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormState
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
+import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.LocalNetworkNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
@@ -82,8 +78,10 @@ import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.ShapedIcon
+import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
 import it.federicoraponi.frigatebridge.ui.designsystem.serverColors
 import it.federicoraponi.frigatebridge.ui.rememberAllowLocalNetwork
 import it.federicoraponi.frigatebridge.ui.rememberLocalNetworkAccess
@@ -159,12 +157,7 @@ fun ServerFormScreen(
             TopAppBar(
                 title = { ScreenTitle(stringResource(title)) },
                 navigationIcon = {
-                    IconButton(onClick = actions.close, shapes = IconButtonDefaults.shapes()) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
-                    }
+                    BackButton(actions.close)
                 },
                 scrollBehavior = scrollBehavior,
             )
@@ -185,7 +178,7 @@ fun ServerFormScreen(
             LoginFields(state, actions)
             ColorPicker(state.colorIndex, actions.setColor)
             if (state.sendsPasswordUnencrypted) NoticeCard(stringResource(R.string.form_cleartext_warning))
-            state.problem?.let { NoticeCard(problemText(it)) }
+            state.problem?.let { NoticeCard(problemText(it), announce = true) }
             if (localNetworkBlocked) LocalNetworkNotice(actions.allowLocalNetwork)
             SaveButtons(state, actions)
         }
@@ -469,11 +462,7 @@ private fun CertificateSheet(
         if (prompt.replacesAccepted) R.string.certificate_changed_message else R.string.certificate_message
     ModalBottomSheet(
         onDismissRequest = actions.rejectCertificate,
-        sheetState =
-            rememberBottomSheetState(
-                initialValue = SheetValue.Hidden,
-                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-            ),
+        sheetState = rememberFullSheetState(),
     ) {
         Column(
             modifier =
@@ -486,11 +475,7 @@ private fun CertificateSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             ShapedIcon(Icons.Filled.Lock, shape = MaterialShapes.SoftBurst)
-            Text(
-                stringResource(title),
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                textAlign = TextAlign.Center,
-            )
+            SheetTitle(stringResource(title), textAlign = TextAlign.Center)
             Text(
                 stringResource(message),
                 style = MaterialTheme.typography.bodyMedium,

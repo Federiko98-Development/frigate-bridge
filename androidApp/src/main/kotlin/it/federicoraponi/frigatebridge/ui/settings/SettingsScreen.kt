@@ -11,11 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -39,6 +34,7 @@ import it.federicoraponi.frigatebridge.settings.HomeLayout
 import it.federicoraponi.frigatebridge.settings.PreviewRefresh
 import it.federicoraponi.frigatebridge.settings.ThemeMode
 import it.federicoraponi.frigatebridge.ui.SettingsViewModel
+import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
@@ -116,12 +112,7 @@ fun SettingsScreen(
                 title = { ScreenTitle(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     if (onBack != null) {
-                        IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.back),
-                            )
-                        }
+                        BackButton(onBack)
                     }
                 },
             )

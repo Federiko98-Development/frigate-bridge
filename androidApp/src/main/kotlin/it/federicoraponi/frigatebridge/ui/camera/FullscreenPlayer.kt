@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.media3.common.Player
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
@@ -26,13 +28,15 @@ import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 /** A single video over the whole sideways screen. */
 @Composable
 fun FullscreenPlayer(
+    /** What is being watched, said by screen readers when full screen opens. */
+    title: String,
     player: Player?,
     messages: SnackbarHostState,
     onPhoto: (() -> Unit)?,
     onExit: () -> Unit,
     video: @Composable () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black).semantics { paneTitle = title }) {
         video()
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.lg)) {
             Row(
@@ -40,15 +44,20 @@ fun FullscreenPlayer(
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 onPhoto?.let { PhotoButton(it) }
-                FilledTonalIconButton(onClick = onExit, shapes = IconButtonDefaults.shapes()) {
-                    Icon(
-                        painterResource(R.drawable.ic_fullscreen_exit),
-                        contentDescription = stringResource(R.string.video_exit_fullscreen),
-                    )
-                }
+                ExitFullscreenButton(onExit)
             }
             SnackbarHost(messages, Modifier.align(Alignment.Center))
             PlayButton(player, Modifier.align(Alignment.BottomCenter))
         }
+    }
+}
+
+@Composable
+internal fun ExitFullscreenButton(onClick: () -> Unit) {
+    FilledTonalIconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
+        Icon(
+            painterResource(R.drawable.ic_fullscreen_exit),
+            contentDescription = stringResource(R.string.video_exit_fullscreen),
+        )
     }
 }

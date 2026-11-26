@@ -2,7 +2,7 @@ package it.federicoraponi.frigatebridge.ui.camera
 
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.media3.common.MediaItem
@@ -122,6 +125,9 @@ fun RecordingPicture(
     ProvidesPlayerFrames(player)
 }
 
+/** Moves [seconds] back or forward, not before the start. */
+fun Player.seekBy(seconds: Int) = seekTo((currentPosition + seconds * 1_000L).coerceAtLeast(0))
+
 /** Play and pause. */
 @Composable
 fun PlayButton(
@@ -159,32 +165,44 @@ fun PlayButton(
     }
 }
 
-/** Play and pause with jumps of ten seconds and a minute. */
+/** Play and pause with jumps of ten seconds and a minute. With large fonts the jumps wrap to another line. */
 @Composable
 fun RecordingTransport(
     player: Player?,
     onSkip: (Int) -> Unit,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        SkipButton(R.string.video_back_60) { onSkip(-60) }
-        SkipButton(R.string.video_back_10) { onSkip(-10) }
+        SkipButton(-60) { onSkip(-60) }
+        SkipButton(-10) { onSkip(-10) }
         PlayButton(player)
-        SkipButton(R.string.video_forward_10) { onSkip(10) }
-        SkipButton(R.string.video_forward_60) { onSkip(60) }
+        SkipButton(10) { onSkip(10) }
+        SkipButton(60) { onSkip(60) }
     }
 }
 
+/** A jump of [seconds], back or forward: ten seconds or a minute. */
 @Composable
 fun SkipButton(
-    label: Int,
+    seconds: Int,
     onClick: () -> Unit,
 ) {
+    val (label, description) =
+        when (seconds) {
+            -60 -> R.string.video_back_60 to R.string.skip_back_60
+            -10 -> R.string.video_back_10 to R.string.skip_back_10
+            10 -> R.string.video_forward_10 to R.string.skip_forward_10
+            else -> R.string.video_forward_60 to R.string.skip_forward_60
+        }
+    val spoken = stringResource(description)
     FilledTonalButton(
         onClick = onClick,
         shapes = ButtonDefaults.shapes(),
         contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.ExtraSmallContainerHeight),
-    ) { Text(stringResource(label)) }
+        // "−1 m" read aloud says less than "back 1 minute".
+        modifier = Modifier.semantics { contentDescription = spoken },
+    ) { Text(stringResource(label), modifier = Modifier.clearAndSetSemantics {}) }
 }

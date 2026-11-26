@@ -14,34 +14,46 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SheetState
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.RoundedPolygon
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.ConnectionProblem
+import it.federicoraponi.frigatebridge.ui.VideoFailure
 
 // Container-first layout: content sits in tonal, generously rounded containers, without shadows or dividers.
 
@@ -98,6 +110,7 @@ fun OfflineNotice(modifier: Modifier = Modifier) {
         title = stringResource(R.string.offline_title),
         message = stringResource(R.string.offline_message),
         modifier = modifier,
+        announce = true,
     )
 }
 
@@ -119,14 +132,57 @@ fun ShapedIcon(
     }
 }
 
-/** The title of a top app bar. */
+/** The title of a top app bar. One line: the bar has a fixed height, also with large fonts. */
 @Composable
 fun ScreenTitle(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleLargeEmphasized,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.semantics { heading() },
     )
+}
+
+/** The way back, at the start of a top app bar. */
+@Composable
+fun BackButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+    }
+}
+
+/** The title of a bottom sheet. */
+@Composable
+fun SheetTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleLargeEmphasized,
+        textAlign = textAlign,
+        modifier = modifier.semantics { heading() },
+    )
+}
+
+/** The state of a bottom sheet that opens fully and has no half-open stop. */
+@Composable
+fun rememberFullSheetState(): SheetState =
+    rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
+
+/** Keeps the screen on while this is shown, e.g. while a video is being watched. */
+@Composable
+fun KeepScreenOn() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
 }
 
 /** A titled group of segmented items. */
@@ -147,7 +203,10 @@ fun ListGroup(
     }
 }
 
-/** A tonal block with an icon and a message, optionally with one action. */
+/**
+ * A tonal block with an icon and a message, optionally with one action. [announce] it when it appears on its own,
+ * e.g. after something failed, so that screen readers say it without the user looking for it.
+ */
 @Composable
 fun NoticeCard(
     message: String,
@@ -155,9 +214,14 @@ fun NoticeCard(
     title: String? = null,
     actionLabel: String? = null,
     onAction: () -> Unit = {},
+    announce: Boolean = false,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        // The texts are read together; the action stays a node of its own.
+        modifier =
+            modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                if (announce) liveRegion = LiveRegionMode.Polite
+            },
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -268,6 +332,7 @@ fun LocalNetworkNotice(
         actionLabel = stringResource(R.string.local_network_allow),
         onAction = onAllow,
         modifier = modifier,
+        announce = true,
     )
 }
 
@@ -277,6 +342,30 @@ fun unavailableText(
     problem: ConnectionProblem,
     isOffline: Boolean,
 ): String = if (isOffline) stringResource(R.string.offline_title) else problemText(problem)
+
+/** What went wrong: the [problem] if it is known, otherwise [fallback], followed by the server's own [detail]. */
+@Composable
+fun failureText(
+    failure: VideoFailure,
+    fallback: Int,
+): String {
+    val problem = failure.problem
+    val text = if (problem != null) problemText(problem) else stringResource(fallback)
+    return listOfNotNull(text, failure.detail).joinToString("\n")
+}
+
+/** A status that changes on its own, such as the progress of an export, said again by screen readers. */
+@Composable
+fun StatusText(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
+}
 
 @Composable
 fun problemText(problem: ConnectionProblem): String =

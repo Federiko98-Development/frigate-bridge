@@ -8,11 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -35,13 +30,14 @@ import it.federicoraponi.frigatebridge.server.DiskUse
 import it.federicoraponi.frigatebridge.server.ServerStatistics
 import it.federicoraponi.frigatebridge.ui.ServerStatusState
 import it.federicoraponi.frigatebridge.ui.ServerStatusViewModel
+import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import org.koin.androidx.compose.koinViewModel
 
@@ -70,9 +66,7 @@ fun ServerStatusScreen(
             TopAppBar(
                 title = { ScreenTitle(stringResource(R.string.status_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
+                    BackButton(onClose)
                 },
             )
         },
@@ -95,12 +89,11 @@ fun ServerStatusScreen(
                     verticalArrangement = Arrangement.spacedBy(Spacing.lg),
                 ) {
                     state.failure?.let { failure ->
-                        val problem = failure.problem
-                        val text = if (problem != null) problemText(problem) else stringResource(R.string.status_failed)
                         NoticeCard(
-                            message = listOfNotNull(text, failure.detail).joinToString("\n"),
+                            message = failureText(failure, R.string.status_failed),
                             actionLabel = stringResource(R.string.retry),
                             onAction = onRefresh,
+                            announce = true,
                         )
                     }
                     if (statistics != null) Statistics(statistics, state)

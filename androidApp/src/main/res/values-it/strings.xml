@@ -71,7 +71,6 @@
     <string name="video_first_frame">Primo fotogramma dopo %1$d ms</string>
     <string name="video_round_trip">Ritardo di rete %1$d ms</string>
     <string name="video_mute">Disattiva audio</string>
-    <string name="video_unmute">Attiva audio</string>
     <string name="video_play">Riproduci</string>
     <string name="video_pause">Pausa</string>
     <string name="video_back_10">−10 s</string>
@@ -205,7 +204,6 @@
     <string name="photo_saved">Foto salvata nella galleria</string>
     <string name="photo_no_picture">Non c’è ancora un’immagine</string>
     <string name="clip_start">Registra una clip</string>
-    <string name="clip_stop">Ferma la registrazione</string>
     <string name="clip_recording">Registrazione %1$s</string>
     <string name="clip_preparing">Preparo la clip…</string>
     <string name="clip_saved">Clip salvata nella galleria</string>
@@ -258,4 +256,22 @@
     <string name="keep_working">Salvataggio dell’evento…</string>
     <string name="keep_open">Salvato: vedi gli eventi salvati</string>
     <string name="keep_failed">Evento non salvato</string>
+    <!-- Accessibility -->
+    <string name="picture_description">Immagine del video</string>
+    <string name="picture_zoom_in">Ingrandisci l’immagine</string>
+    <string name="picture_zoom_out">Riduci l’immagine</string>
+    <string name="timeline_drawer">Pannello della timeline</string>
+    <string name="timeline_previous_mark">Registrazione o evento precedente</string>
+    <string name="timeline_next_mark">Registrazione o evento successivo</string>
+    <string name="timeline_not_recorded">Nessuna registrazione</string>
+    <string name="skip_back_10">Indietro di 10 secondi</string>
+    <string name="skip_forward_10">Avanti di 10 secondi</string>
+    <string name="skip_back_60">Indietro di 1 minuto</string>
+    <string name="skip_forward_60">Avanti di 1 minuto</string>
+    <string name="clip_recording_now">Registrazione della clip in corso</string>
+    <plurals name="cameras_shown_count">
+        <item quantity="one">%1$d di %2$d telecamera mostrata</item>
+        <item quantity="many">%1$d di %2$d telecamere mostrate</item>
+        <item quantity="other">%1$d di %2$d telecamere mostrate</item>
+    </plurals>
 </resources>

@@ -55,7 +55,12 @@ class ExportViewModel(
         if (mutableState.value.isDeleting) return
         mutableState.update { it.copy(isDeleting = true, failure = null) }
         viewModelScope.launch {
-            val session = registry.session(args.serverId) ?: return@launch
+            val session = registry.session(args.serverId)
+            if (session == null) {
+                // The server was removed meanwhile: there is nothing left to show.
+                mutableState.update { it.copy(isGone = true) }
+                return@launch
+            }
             try {
                 session.deleteExport(item.id)
                 item.savedReviewId?.let { review ->

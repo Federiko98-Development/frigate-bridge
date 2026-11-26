@@ -33,8 +33,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -78,6 +81,19 @@ private val SNAP_REACH = 12.dp
 
 // A moment shorter than this would be too thin to see.
 private val MIN_MARK_WIDTH = 3.dp
+
+// The strip at the normal font size. The hour labels above the bar grow with the font, and the strip with them.
+private val STRIP_HEIGHT = 64.dp
+private val LABEL_TOP = 6.dp
+private val BAR_TOP = STRIP_HEIGHT * 0.45f
+private val BAR_HEIGHT = STRIP_HEIGHT * 0.38f
+private val BAR_BOTTOM_SPACE = STRIP_HEIGHT - BAR_TOP - BAR_HEIGHT
+
+// Alerts rise above the bar, so that they differ from detections by more than their colour.
+private val ALERT_RISE = 4.dp
+
+// How far the actions offered to screen readers move, in seconds.
+private const val ACCESSIBLE_STEP_SECONDS = 60
 
 /**
  * The day as a strip that slides under a fixed pointer: recorded stretches, with the review moments on top.
@@ -134,26 +150,64 @@ fun TimelineBar(
     val measurer = rememberTextMeasurer()
     val colors = MaterialTheme.colorScheme
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurfaceVariant)
+    val density = LocalDensity.current
+    val labelPixels = remember(measurer, labelStyle, density) { measurer.measure("00:00", labelStyle).size.height }
+    val labelHeight = with(density) { labelPixels.toDp() }
+    val barOffset = maxOf(BAR_TOP, LABEL_TOP + labelHeight + LABEL_TOP)
     val description = stringResource(R.string.timeline_description)
     val shownText = clockTime(shown)
     val hourFormat = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
+    // What the colours of the strip say, for those who cannot see them.
+    val markerHere = markers.firstOrNull { shown >= it.start && shown <= (it.end ?: it.start) }
+    val recordedHere = ranges.any { shown >= it.start && shown < it.end }
+    val state =
+        listOfNotNull(
+            shownText,
+            markerHere?.let {
+                stringResource(
+                    if (it.severity == ReviewSeverity.Alert) R.string.event_alert else R.string.event_detection,
+                )
+            },
+            stringResource(R.string.timeline_not_recorded).takeIf { !recordedHere },
+        ).joinToString(", ")
+    val marks = remember(points) { points.sorted() }
+    val actions =
+        listOf(
+            stringResource(R.string.skip_back_60) to { shown - ACCESSIBLE_STEP_SECONDS },
+            stringResource(R.string.skip_forward_60) to { shown + ACCESSIBLE_STEP_SECONDS },
+            stringResource(R.string.timeline_previous_mark) to { marks.lastOrNull { it < shown - 1 } },
+            stringResource(R.string.timeline_next_mark) to { marks.firstOrNull { it > shown + 1 } },
+        ).map { (label, target) ->
+            CustomAccessibilityAction(label) {
+                val moment = target() ?: return@CustomAccessibilityAction false
+                seek(moment.coerceIn(day.start, day.end - 1))
+                true
+            }
+        }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        Text(shownText, style = MaterialTheme.typography.titleMediumEmphasized, color = colors.onSurface)
+        // The strip below says it too, with what is happening at that moment.
+        Text(
+            shownText,
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = colors.onSurface,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
         Surface(shape = MaterialTheme.shapes.large, color = colors.surfaceContainer) {
             Canvas(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
+                        .height(maxOf(STRIP_HEIGHT, barOffset + BAR_HEIGHT + BAR_BOTTOM_SPACE))
                         .onSizeChanged { width = maxOf(it.width, 1) }
                         .semantics {
                             contentDescription = description
-                            stateDescription = shownText
+                            stateDescription = state
+                            customActions = actions
                             progressBarRangeInfo =
                                 ProgressBarRangeInfo(
                                     (shown - day.start).toFloat(),
@@ -177,8 +231,8 @@ fun TimelineBar(
 
                 fun x(moment: Long) = center + (moment - shown) * pixelsPerSecond
 
-                val barTop = size.height * 0.45f
-                val barHeight = size.height * 0.38f
+                val barTop = barOffset.toPx()
+                val barHeight = BAR_HEIGHT.toPx()
                 clipRect {
                     ranges.forEach { range ->
                         val left = x(range.start)
@@ -191,10 +245,12 @@ fun TimelineBar(
                         val left = x(marker.start)
                         val right = x(marker.end ?: marker.start)
                         if (right >= 0f && left <= size.width) {
+                            val alert = marker.severity == ReviewSeverity.Alert
+                            val rise = if (alert) ALERT_RISE.toPx() else 0f
                             drawRect(
-                                if (marker.severity == ReviewSeverity.Alert) colors.error else colors.tertiary,
-                                Offset(left, barTop),
-                                Size(maxOf(right - left, MIN_MARK_WIDTH.toPx()), barHeight),
+                                if (alert) colors.error else colors.tertiary,
+                                Offset(left, barTop - rise),
+                                Size(maxOf(right - left, MIN_MARK_WIDTH.toPx()), barHeight + rise),
                             )
                         }
                     }
@@ -216,7 +272,7 @@ fun TimelineBar(
                             1.dp.toPx(),
                         )
                         val label = measurer.measure(hourFormat.format(Instant.ofEpochSecond(tick)), labelStyle)
-                        drawText(label, topLeft = Offset(position - label.size.width / 2f, 6.dp.toPx()))
+                        drawText(label, topLeft = Offset(position - label.size.width / 2f, LABEL_TOP.toPx()))
                         tick += zoom.tickSeconds
                     }
                 }

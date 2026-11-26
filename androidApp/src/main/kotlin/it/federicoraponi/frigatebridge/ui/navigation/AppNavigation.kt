@@ -184,16 +184,16 @@ private fun AppNavHost(
     ) {
         composable<Servers> {
             ServerListRoute(
-                onOpenCameras = { navController.navigate(Cameras) { launchSingleTop = true } },
-                onAddServer = { navController.navigate(ServerForm()) { launchSingleTop = true } },
-                onEditServer = { navController.navigate(ServerForm(it)) { launchSingleTop = true } },
-                onOpenSettings = { navController.navigate(SettingsPage) { launchSingleTop = true } },
+                onOpenCameras = { navController.open(Cameras) },
+                onAddServer = { navController.open(ServerForm()) },
+                onEditServer = { navController.open(ServerForm(it)) },
+                onOpenSettings = { navController.open(SettingsPage) },
             )
         }
         composable<Cameras> {
             CamerasRoute(
                 onShowServers = { navController.showServers() },
-                onEditServer = { navController.navigate(ServerForm(it)) { launchSingleTop = true } },
+                onEditServer = { navController.open(ServerForm(it)) },
                 onOpenCamera = { navController.openCamera(it, recording = false) },
                 bottomBar = { tabBar(MainTab.Cameras) },
             )
@@ -201,9 +201,7 @@ private fun AppNavHost(
         composable<Events> {
             EventsRoute(
                 onShowServers = { navController.showServers() },
-                onOpen = { moment ->
-                    navController.navigate(EventView(moment.serverId, moment.id)) { launchSingleTop = true }
-                },
+                onOpen = { moment -> navController.open(EventView(moment.serverId, moment.id)) },
                 onOpenSaved = { navController.open(ExportList(savedOnly = true)) },
                 bottomBar = { tabBar(MainTab.Events) },
             )
@@ -294,7 +292,7 @@ private fun NavHostController.openCamera(
     recording: Boolean,
     startTime: Long = 0,
 ) {
-    navigate(CameraView(camera.serverId, camera.cameraName, recording, startTime)) { launchSingleTop = true }
+    open(CameraView(camera.serverId, camera.cameraName, recording, startTime))
 }
 
 /** Moves between tabs, keeping the cameras underneath so that back always returns to them. */

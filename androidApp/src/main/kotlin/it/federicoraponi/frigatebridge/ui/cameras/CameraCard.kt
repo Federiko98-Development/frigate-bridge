@@ -33,6 +33,13 @@ import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 
 private val RecordingColor = Color(0xFFFF5449)
 
+private val ScrimStops =
+    arrayOf(
+        0f to Color.Transparent,
+        0.3f to Color.Black.copy(alpha = 0.7f),
+        1f to Color.Black.copy(alpha = 0.85f),
+    )
+
 /** A camera: its picture fills the card, with the name and what it is doing written over the bottom. */
 @Composable
 fun CameraCard(
@@ -77,8 +84,9 @@ fun CameraCard(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        // Darkens the bottom of the picture so that white text stays readable on it.
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))))
+                        // Darkens the bottom of the picture so that white text stays readable on it, also over a
+                        // white picture: dark enough already where the text starts.
+                        .background(Brush.verticalGradient(*ScrimStops))
                         .padding(start = Spacing.md, end = Spacing.sm, top = Spacing.lg, bottom = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs),

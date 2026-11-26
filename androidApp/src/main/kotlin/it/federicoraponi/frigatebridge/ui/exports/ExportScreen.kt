@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -17,33 +16,24 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,17 +54,22 @@ import it.federicoraponi.frigatebridge.ui.camera.RecordingTransport
 import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
 import it.federicoraponi.frigatebridge.ui.camera.ZoomableVideo
 import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
+import it.federicoraponi.frigatebridge.ui.camera.seekBy
 import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
 import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
 import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
+import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
+import it.federicoraponi.frigatebridge.ui.designsystem.KeepScreenOn
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
+import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
-import it.federicoraponi.frigatebridge.ui.recordings.downloadAndShare
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
+import it.federicoraponi.frigatebridge.ui.designsystem.failureText
+import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
+import it.federicoraponi.frigatebridge.ui.recordings.DownloadProgress
+import it.federicoraponi.frigatebridge.ui.recordings.SharingFailure
+import it.federicoraponi.frigatebridge.ui.recordings.rememberExportSharing
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -90,11 +85,7 @@ fun ExportRoute(
     LaunchedEffect(state.isGone) {
         if (state.isGone) onClose()
     }
-    val view = LocalView.current
-    DisposableEffect(view) {
-        view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false }
-    }
+    KeepScreenOn()
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     val player =
         state.file?.let { file ->
@@ -127,23 +118,19 @@ fun ExportRoute(
     if (fullscreen) {
         BackHandler { fullscreen = false }
         LandscapeFullscreen()
-        FullscreenPlayer(player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
+        val title = name.replace('_', ' ')
+        FullscreenPlayer(title, player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
         return
     }
     var confirming by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var failure by remember { mutableStateOf<String?>(null) }
+    val sharing = rememberExportSharing()
     Scaffold(
         snackbarHost = { SnackbarHost(captures.messages) },
         topBar = {
             TopAppBar(
                 title = { ScreenTitle(stringResource(R.string.export_page_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
+                    BackButton(onClose)
                 },
             )
         },
@@ -159,9 +146,7 @@ fun ExportRoute(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             VideoFrame { picture() }
-            RecordingTransport(player, onSkip = { seconds ->
-                player?.seekTo((player.currentPosition + seconds * 1_000L).coerceAtLeast(0))
-            })
+            RecordingTransport(player, onSkip = { player?.seekBy(it) })
             takePhoto?.let { PhotoButton(it) }
             FullscreenButton { fullscreen = true }
             if (name.isNotEmpty()) {
@@ -172,45 +157,24 @@ fun ExportRoute(
                 )
             }
             state.file?.let { file ->
-                if (busy) {
-                    Text(stringResource(R.string.export_downloading), style = MaterialTheme.typography.bodyMedium)
-                    LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+                if (sharing.isBusy) {
+                    DownloadProgress()
                 } else {
                     PrimaryButton(
                         text = stringResource(R.string.export_save),
                         onClick = {
                             val item = state.item ?: return@PrimaryButton
-                            busy = true
-                            scope.launch {
-                                captures.saveClip(file, item.camera.cameraName, item.date)
-                                busy = false
-                            }
+                            sharing.whileBusy { captures.saveClip(file, item.camera.cameraName, item.date) }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    FilledTonalButton(
-                        onClick = {
-                            busy = true
-                            failure = null
-                            scope.launch {
-                                try {
-                                    context.downloadAndShare(file)
-                                } catch (cancellation: CancellationException) {
-                                    throw cancellation
-                                } catch (error: Exception) {
-                                    failure = error.message ?: error.javaClass.simpleName
-                                }
-                                busy = false
-                            }
-                        },
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
+                    FilledTonalButton(onClick = { sharing.share(file) }, shapes = ButtonDefaults.shapes()) {
                         Icon(Icons.Filled.Share, contentDescription = null)
                         Text(stringResource(R.string.export_share), modifier = Modifier.padding(start = Spacing.sm))
                     }
                 }
             }
-            failure?.let { NoticeCard(stringResource(R.string.export_failed) + "\n" + it) }
+            SharingFailure(sharing)
             val item = state.item
             if (item != null && !item.inProgress) {
                 TextButton(
@@ -226,11 +190,7 @@ fun ExportRoute(
             if (state.isDeleting) ContainedLoadingIndicator()
             // A failure to play is told over the video; this one is about deleting.
             if (state.file != null) {
-                state.failure?.let { failed ->
-                    val problem = failed.problem
-                    val text = if (problem != null) problemText(problem) else stringResource(R.string.control_failed)
-                    NoticeCard(message = listOfNotNull(text, failed.detail).joinToString("\n"))
-                }
+                state.failure?.let { NoticeCard(message = failureText(it, R.string.control_failed), announce = true) }
             }
         }
     }
@@ -274,18 +234,14 @@ private fun DeleteSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState =
-            rememberBottomSheetState(
-                initialValue = SheetValue.Hidden,
-                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-            ),
+        sheetState = rememberFullSheetState(),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            Text(stringResource(R.string.export_delete_title), style = MaterialTheme.typography.titleLargeEmphasized)
+            SheetTitle(stringResource(R.string.export_delete_title))
             Text(
                 stringResource(if (isSaved) R.string.export_delete_saved else R.string.export_delete_message),
                 textAlign = TextAlign.Center,

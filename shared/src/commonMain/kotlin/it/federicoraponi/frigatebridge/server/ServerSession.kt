@@ -126,6 +126,16 @@ class ServerSession(
     private val mutableState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val state: StateFlow<ConnectionState> = mutableState.asStateFlow()
 
+    /** The names of the cameras as shown to the user, by their name on the server; empty until connected. */
+    val cameraNames: Map<String, String>
+        get() =
+            (state.value as? ConnectionState.Connected)
+                ?.snapshot
+                ?.catalog
+                ?.cameras
+                ?.associate { it.ref.cameraName to it.displayName }
+                .orEmpty()
+
     /** Connects and reads cameras and groups. Failures end up in [state] and are not thrown. */
     suspend fun refresh(): ConnectionState =
         refreshMutex.withLock {

@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.frigate.FrigateError
 import it.federicoraponi.frigatebridge.recordings.ExportItem
-import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSession
 import kotlinx.coroutines.Job
@@ -57,14 +56,7 @@ class ExportsViewModel(
                 try {
                     var all = emptyList<ExportItem>()
                     visibleRefresh { all = session.exports() }
-                    val connection = session.state.value as? ConnectionState.Connected
-                    val names =
-                        connection
-                            ?.snapshot
-                            ?.catalog
-                            ?.cameras
-                            ?.associate { it.ref.cameraName to it.displayName }
-                            .orEmpty()
+                    val names = session.cameraNames
                     val items = if (args.savedOnly) all.filter { it.savedReviewId != null } else all
                     mutableState.update {
                         it.copy(

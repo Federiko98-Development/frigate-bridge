@@ -25,7 +25,7 @@ import it.federicoraponi.frigatebridge.ui.PtzMove
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 
 /** Movement of a camera: arrows, zoom and the saved positions. */
 @Composable
@@ -116,9 +116,5 @@ fun FeaturePanel(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = Spacing.lg),
     )
-    controls.failure?.let { failure ->
-        val problem = failure.problem
-        val text = if (problem != null) problemText(problem) else stringResource(R.string.control_failed)
-        NoticeCard(message = listOfNotNull(text, failure.detail).joinToString("\n"))
-    }
+    controls.failure?.let { NoticeCard(message = failureText(it, R.string.control_failed), announce = true) }
 }

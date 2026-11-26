@@ -1,19 +1,16 @@
 package it.federicoraponi.frigatebridge.ui.cameras
 
-import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import it.federicoraponi.frigatebridge.camera.CameraRef
-import kotlinx.coroutines.Dispatchers
+import it.federicoraponi.frigatebridge.ui.designsystem.decodePicture
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 
 /** Where the pictures of the camera grid come from. */
 class CameraPreviews(
@@ -42,10 +39,10 @@ fun previewPicture(
     val source by rememberUpdatedState(previews)
     val picture by
         produceState<ImageBitmap?>(null, camera, lifecycle, previews.refreshKey) {
-            source.cached(camera)?.let { value = decode(it) }
+            source.cached(camera)?.let { value = decodePicture(it) }
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 do {
-                    source.load(camera)?.let { bytes -> decode(bytes)?.let { value = it } }
+                    source.load(camera)?.let { bytes -> decodePicture(bytes)?.let { value = it } }
                     val pause = source.interval()
                     if (pause != null) delay(pause)
                 } while (pause != null)
@@ -53,8 +50,3 @@ fun previewPicture(
         }
     return picture
 }
-
-private suspend fun decode(bytes: ByteArray): ImageBitmap? =
-    withContext(Dispatchers.Default) {
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-    }

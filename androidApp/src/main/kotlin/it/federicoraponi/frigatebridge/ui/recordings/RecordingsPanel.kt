@@ -9,9 +9,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -31,7 +29,9 @@ import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.camera.RecordingTransport
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
 
 /** The playback speeds offered. */
 val playbackSpeeds = listOf(1f, 2f, 4f, 8f)
@@ -121,18 +121,14 @@ private fun ExportSheet(
     var chosen by remember { mutableIntStateOf(1) }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState =
-            rememberBottomSheetState(
-                initialValue = SheetValue.Hidden,
-                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-            ),
+        sheetState = rememberFullSheetState(),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl).padding(bottom = Spacing.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            Text(stringResource(R.string.export_clip), style = MaterialTheme.typography.titleLargeEmphasized)
+            SheetTitle(stringResource(R.string.export_clip))
             Text(stringResource(R.string.export_from, clockTime(from)), textAlign = TextAlign.Center)
             ConnectedChoice(
                 labels = exportLengths.map { stringResource(it.second) },

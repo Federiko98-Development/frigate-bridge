@@ -3,7 +3,6 @@ package it.federicoraponi.frigatebridge.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.frigate.FrigateError
-import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerStatistics
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,16 +51,13 @@ class ServerStatusViewModel(
             try {
                 var statistics: ServerStatistics? = null
                 visibleRefresh { statistics = session.statistics() }
-                val connection = session.state.value as? ConnectionState.Connected
-                val names =
-                    connection
-                        ?.snapshot
-                        ?.catalog
-                        ?.cameras
-                        ?.associate { it.ref.cameraName to it.displayName }
-                        .orEmpty()
                 mutableState.update {
-                    it.copy(statistics = statistics, cameraNames = names, isRefreshing = false, failure = null)
+                    it.copy(
+                        statistics = statistics,
+                        cameraNames = session.cameraNames,
+                        isRefreshing = false,
+                        failure = null,
+                    )
                 }
             } catch (error: FrigateError) {
                 mutableState.update { it.copy(isRefreshing = false, failure = error.toVideoFailure()) }

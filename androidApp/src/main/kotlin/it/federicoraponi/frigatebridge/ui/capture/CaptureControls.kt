@@ -21,6 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.ClipState
@@ -55,7 +59,8 @@ fun ClipButton(
     ) {
         Icon(
             painterResource(if (recording) R.drawable.ic_stop else R.drawable.ic_record),
-            contentDescription = stringResource(if (recording) R.string.clip_stop else R.string.clip_start),
+            // The state is said apart, as on or off.
+            contentDescription = stringResource(R.string.clip_start),
             tint = if (recording) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.error,
         )
     }
@@ -74,8 +79,14 @@ fun RecordingBadge(
                 delay(500)
             }
         }
+    val announcement = stringResource(R.string.clip_recording_now)
     Surface(
-        modifier = modifier,
+        // Said once when it appears: the time going by would be said again every second.
+        modifier =
+            modifier.clearAndSetSemantics {
+                contentDescription = announcement
+                liveRegion = LiveRegionMode.Polite
+            },
         shape = CircleShape,
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,

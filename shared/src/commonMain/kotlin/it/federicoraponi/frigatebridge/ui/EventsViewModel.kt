@@ -284,7 +284,7 @@ class EventsViewModel(
                     // A group that no longer exists gives way to all the cameras.
                     val choice = choices.firstOrNull { it.name == filter.group } ?: choices.firstOrNull()
                     val everything = choice == null || (choice.name == null && !choice.isPartial)
-                    val names = if (everything) null else choice?.shown?.map { it.ref.cameraName }
+                    val names = if (everything) null else choice.shown.map { it.ref.cameraName }
                     // An empty list would ask for every camera.
                     val page =
                         if (names != null && names.isEmpty()) {

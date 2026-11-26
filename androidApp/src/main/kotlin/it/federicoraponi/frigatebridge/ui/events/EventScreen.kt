@@ -4,21 +4,18 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
@@ -40,7 +36,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -67,16 +62,21 @@ import it.federicoraponi.frigatebridge.ui.camera.SkipButton
 import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
 import it.federicoraponi.frigatebridge.ui.camera.ZoomableVideo
 import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
+import it.federicoraponi.frigatebridge.ui.camera.seekBy
 import it.federicoraponi.frigatebridge.ui.capture.LocalFrameCapture
 import it.federicoraponi.frigatebridge.ui.capture.PhotoButton
 import it.federicoraponi.frigatebridge.ui.capture.rememberCaptures
+import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
+import it.federicoraponi.frigatebridge.ui.designsystem.KeepScreenOn
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.designsystem.StatusText
+import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.recordings.ExportSection
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
+import it.federicoraponi.frigatebridge.ui.recordings.dayAndTime
 import it.federicoraponi.frigatebridge.ui.recordings.dayLabel
 import it.federicoraponi.frigatebridge.ui.recordings.dayOf
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
@@ -102,7 +102,6 @@ fun EventRoute(
         if (state.isGone) onClose()
     }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
-    val view = LocalView.current
     val ready = state.playback as? PlaybackState.Ready
     val player =
         ready?.let {
@@ -116,16 +115,13 @@ fun EventRoute(
             )
         }
     // The screen stays on while a moment is being watched.
-    DisposableEffect(view) {
-        view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false }
-    }
+    KeepScreenOn()
     val captures = rememberCaptures()
     val takePhoto =
         player?.let { current ->
             {
                 // The video starts a little before the moment itself.
-                val time = (ready?.clip?.startTime ?: 0) + current.currentPosition / 1_000
+                val time = ready.clip.startTime + current.currentPosition / 1_000
                 captures.takePhoto(state.cameraName, time)
             }
         }
@@ -142,7 +138,13 @@ fun EventRoute(
     if (fullscreen) {
         BackHandler { fullscreen = false }
         LandscapeFullscreen()
-        FullscreenPlayer(player, captures.messages, takePhoto, onExit = { fullscreen = false }) { picture() }
+        FullscreenPlayer(
+            state.cameraName,
+            player,
+            captures.messages,
+            takePhoto,
+            onExit = { fullscreen = false },
+        ) { picture() }
     } else {
         EventScreen(
             state = state,
@@ -183,12 +185,7 @@ private fun EventScreen(
                 // The camera is not known yet, or the server no longer has the moment.
                 title = { ScreenTitle(state.cameraName.ifEmpty { stringResource(R.string.event_title) }) },
                 navigationIcon = {
-                    IconButton(onClick = onClose, shapes = IconButtonDefaults.shapes()) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
-                    }
+                    BackButton(onClose)
                 },
             )
         },
@@ -204,13 +201,14 @@ private fun EventScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             VideoFrame(video)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                SkipButton(R.string.video_back_10) { player?.seekBy(-SKIP_SECONDS) }
+                SkipButton(-SKIP_SECONDS) { player?.seekBy(-SKIP_SECONDS) }
                 PlayButton(player)
-                SkipButton(R.string.video_forward_10) { player?.seekBy(SKIP_SECONDS) }
+                SkipButton(SKIP_SECONDS) { player?.seekBy(SKIP_SECONDS) }
                 onPhoto?.let { PhotoButton(it) }
             }
             FullscreenButton(onFullscreen)
@@ -240,8 +238,6 @@ private fun EventScreen(
         }
     }
 }
-
-private fun Player.seekBy(seconds: Int) = seekTo((currentPosition + seconds * 1_000L).coerceAtLeast(0))
 
 @Composable
 private fun EventVideo(
@@ -274,19 +270,17 @@ private fun KeepSection(
     when (keeping) {
         Keeping.NotKept -> KeepButton(R.string.keep_event, onKeep)
         Keeping.Working -> {
-            Text(stringResource(R.string.keep_working), style = MaterialTheme.typography.bodyMedium)
+            StatusText(stringResource(R.string.keep_working))
             LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
         Keeping.Kept -> KeepButton(R.string.keep_open, onOpenKept)
-        is Keeping.Failed -> {
-            val problem = keeping.failure.problem
-            val text = if (problem != null) problemText(problem) else stringResource(R.string.keep_failed)
+        is Keeping.Failed ->
             NoticeCard(
-                message = listOfNotNull(text, keeping.failure.detail).joinToString("\n"),
+                message = failureText(keeping.failure, R.string.keep_failed),
                 actionLabel = stringResource(R.string.retry),
                 onAction = onKeep,
+                announce = true,
             )
-        }
     }
 }
 
@@ -309,15 +303,13 @@ private fun Details(item: ReviewItem) {
         stringResource(
             if (item.severity == ReviewSeverity.Alert) R.string.event_alert else R.string.event_detection,
         )
-    val length =
-        item.end?.let { stringResource(R.string.events_seconds, (it - item.start).toInt()) }
-            ?: stringResource(R.string.events_in_progress)
+    val length = momentLength(item)
     val zones = item.zones.joinToString { zone -> zone.replace('_', ' ') }
     val rows =
         listOfNotNull(
             (stringResource(R.string.event_what) to seen).takeIf { seen.isNotEmpty() },
             stringResource(R.string.event_kind) to kind,
-            stringResource(R.string.event_when) to "${dayLabel(dayOf(item.start))} · ${clockTime(item.start)}",
+            stringResource(R.string.event_when) to dayAndTime(item.start),
             stringResource(R.string.event_duration) to length,
             (stringResource(R.string.event_zones) to zones).takeIf { zones.isNotEmpty() },
         )

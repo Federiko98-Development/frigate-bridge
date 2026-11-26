@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,12 +35,19 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 
 private const val MAXIMUM_SCALE = 5f
 private const val DOUBLE_TAP_SCALE = 2.5f
+
+// One step of the zoom offered to screen readers, which cannot pinch.
+private const val ACCESSIBLE_ZOOM_STEP = 1.5f
 
 /** The magnification of a picture on the phone: nothing to do with the camera's own zoom. */
 @Stable
@@ -60,6 +68,8 @@ private class DigitalZoom {
 
     val isZoomed: Boolean get() = scale > 1.01f
 
+    val canZoomIn: Boolean get() = scale < MAXIMUM_SCALE - 0.01f
+
     private val centre get() = Offset(area.width / 2f, area.height / 2f)
 
     /** Magnifies by [factor] keeping the point under [at] where it is, then moves by [pan]. */
@@ -76,6 +86,9 @@ private class DigitalZoom {
         scale = next
         offset = Offset(moved.x.coerceIn(-room.x, room.x), moved.y.coerceIn(-room.y, room.y))
     }
+
+    /** Magnifies by [factor] around the point in the middle of the area. */
+    fun zoomBy(factor: Float) = change(centre, Offset.Zero, factor)
 
     fun toggle(at: Offset) {
         if (isZoomed) reset() else change(at, Offset.Zero, DOUBLE_TAP_SCALE / scale)
@@ -108,12 +121,44 @@ fun ZoomableVideo(
         } else {
             Modifier
         }
+    val description = stringResource(R.string.picture_description)
+    val zoomIn = stringResource(R.string.picture_zoom_in)
+    val zoomOut = stringResource(R.string.picture_zoom_out)
+    val reset = stringResource(R.string.picture_zoom_reset)
+    // Read here, so that the actions offered change with them; they change far less often than the scale.
+    val zoomedState = remember(zoom) { derivedStateOf { zoom.isZoomed } }
+    val canZoomInState = remember(zoom) { derivedStateOf { zoom.canZoomIn } }
+    val zoomed = zoomedState.value
+    val canZoomIn = canZoomInState.value
+    // Not merged: a failure message and its button over the picture stay reachable on their own.
+    val accessible =
+        Modifier.semantics {
+            contentDescription = description
+            if (enabled) {
+                customActions =
+                    listOfNotNull(
+                        CustomAccessibilityAction(zoomIn) {
+                            zoom.zoomBy(ACCESSIBLE_ZOOM_STEP)
+                            true
+                        }.takeIf { canZoomIn },
+                        CustomAccessibilityAction(zoomOut) {
+                            zoom.zoomBy(1f / ACCESSIBLE_ZOOM_STEP)
+                            true
+                        }.takeIf { zoomed },
+                        CustomAccessibilityAction(reset) {
+                            zoom.reset()
+                            true
+                        }.takeIf { zoomed },
+                    )
+            }
+        }
     Box(
         modifier =
             modifier
                 .fillMaxSize()
                 .clipToBounds()
                 .onSizeChanged { zoom.area = it }
+                .then(accessible)
                 .then(gestures),
         contentAlignment = Alignment.Center,
     ) {
@@ -125,7 +170,7 @@ fun ZoomableVideo(
                 translationY = zoom.offset.y
             },
         )
-        if (enabled && zoom.isZoomed) {
+        if (enabled && zoomed) {
             ZoomLevel(zoom.scale, onReset = zoom::reset, Modifier.align(Alignment.CenterStart).padding(Spacing.sm))
         }
     }

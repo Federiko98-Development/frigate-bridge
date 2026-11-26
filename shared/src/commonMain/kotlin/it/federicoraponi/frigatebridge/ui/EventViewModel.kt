@@ -117,15 +117,8 @@ class EventViewModel(
                 try {
                     val item = session.review(args.reviewId)
                     val connection = session.state.value as? ConnectionState.Connected
-                    val camera =
-                        connection
-                            ?.snapshot
-                            ?.catalog
-                            ?.cameras
-                            ?.firstOrNull { it.ref == item.camera }
-                    mutableState.update {
-                        it.copy(item = item, cameraName = camera?.displayName ?: item.camera.cameraName)
-                    }
+                    val cameraName = session.cameraNames[item.camera.cameraName] ?: item.camera.cameraName
+                    mutableState.update { it.copy(item = item, cameraName = cameraName) }
                     markViewed(session, item)
                     if (connection?.snapshot?.catalog?.canChangeSettings == true) readKeeping(session, item)
                     val range = clipRange(item)

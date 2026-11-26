@@ -1,20 +1,17 @@
 package it.federicoraponi.frigatebridge.ui.events
 
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -23,7 +20,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -41,14 +37,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -68,12 +60,11 @@ import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.OfflineNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Thumbnail
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
 import it.federicoraponi.frigatebridge.ui.recordings.dayLabel
 import it.federicoraponi.frigatebridge.ui.recordings.minuteLabel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 
 /** Alerts and detections of the active server. */
@@ -173,6 +164,7 @@ private fun EventList(
                     message = problemText(problem),
                     actionLabel = stringResource(R.string.retry),
                     onAction = viewModel::refresh,
+                    announce = true,
                 )
             }
         }
@@ -251,9 +243,10 @@ private fun ShownMoment(
     onChoose: () -> Unit,
 ) {
     if (state.date.isEmpty()) return
-    Row(
+    // With large fonts "mark all as seen" moves to a line of its own.
+    FlowRow(
         modifier = Modifier.fillMaxWidth().padding(top = Spacing.xs, bottom = Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         val day = dayLabel(state.date)
         val from = state.filter.fromMinute?.let { stringResource(R.string.events_from, minuteLabel(it)) }
@@ -296,6 +289,12 @@ internal fun labelName(label: String): String {
         ?: label.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }
 
+/** How long a moment lasted, or that it is still going on. */
+@Composable
+internal fun momentLength(moment: ReviewItem): String =
+    moment.end?.let { stringResource(R.string.events_seconds, (it - moment.start).toInt()) }
+        ?: stringResource(R.string.events_in_progress)
+
 @Composable
 private fun EventRow(
     moment: ReviewItem,
@@ -317,7 +316,7 @@ private fun EventRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Thumbnail(moment, viewModel)
+            Thumbnail(moment.id) { viewModel.cachedThumbnail(moment) ?: viewModel.loadThumbnail(moment) }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val seen = moment.labels.map { labelName(it) }
                 Text(
@@ -327,11 +326,8 @@ private fun EventRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(cameraName, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                val length =
-                    moment.end?.let { stringResource(R.string.events_seconds, (it - moment.start).toInt()) }
-                        ?: stringResource(R.string.events_in_progress)
                 Text(
-                    "${clockTime(moment.start)} · $length",
+                    "${clockTime(moment.start)} · ${momentLength(moment)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                 )
@@ -348,33 +344,6 @@ private fun EventRow(
                             ).semantics { contentDescription = label },
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun Thumbnail(
-    moment: ReviewItem,
-    viewModel: EventsViewModel,
-) {
-    val picture by
-        produceState<ImageBitmap?>(null, moment.id) {
-            val bytes = viewModel.cachedThumbnail(moment) ?: viewModel.loadThumbnail(moment) ?: return@produceState
-            value =
-                withContext(Dispatchers.Default) {
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                }
-        }
-    Surface(
-        modifier = Modifier.width(112.dp).aspectRatio(16f / 9f),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    ) {
-        val shown = picture
-        if (shown != null) {
-            Image(shown, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
-            Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Warning, contentDescription = null) }
         }
     }
 }

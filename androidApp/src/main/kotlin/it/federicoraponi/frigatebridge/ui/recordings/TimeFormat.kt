@@ -34,6 +34,10 @@ fun dayLabel(date: String): String {
     }
 }
 
+/** "Today · 18:05:09", or the date and the time of [epochSeconds]. */
+@Composable
+fun dayAndTime(epochSeconds: Long): String = "${dayLabel(dayOf(epochSeconds))} · ${clockTime(epochSeconds)}"
+
 /** The day of [epochSeconds] on this phone, as `yyyy-mm-dd`. */
 fun dayOf(epochSeconds: Long): String =
     Instant

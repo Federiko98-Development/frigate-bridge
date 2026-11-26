@@ -72,7 +72,6 @@
     <string name="video_first_frame">First frame after %1$d ms</string>
     <string name="video_round_trip">Network delay %1$d ms</string>
     <string name="video_mute">Mute</string>
-    <string name="video_unmute">Unmute</string>
     <string name="video_play">Play</string>
     <string name="video_pause">Pause</string>
     <string name="video_back_10">−10 s</string>
@@ -206,7 +205,6 @@
     <string name="photo_saved">Photo saved to the gallery</string>
     <string name="photo_no_picture">There is no picture yet</string>
     <string name="clip_start">Record a clip</string>
-    <string name="clip_stop">Stop recording</string>
     <string name="clip_recording">Recording %1$s</string>
     <string name="clip_preparing">Preparing the clip…</string>
     <string name="clip_saved">Clip saved to the gallery</string>
@@ -259,4 +257,21 @@
     <string name="keep_working">Saving the event…</string>
     <string name="keep_open">Saved: view saved events</string>
     <string name="keep_failed">Event not saved</string>
+    <!-- Accessibility -->
+    <string name="picture_description">Video picture</string>
+    <string name="picture_zoom_in">Zoom in on the picture</string>
+    <string name="picture_zoom_out">Zoom out of the picture</string>
+    <string name="timeline_drawer">Timeline drawer</string>
+    <string name="timeline_previous_mark">Previous recording or event</string>
+    <string name="timeline_next_mark">Next recording or event</string>
+    <string name="timeline_not_recorded">Nothing recorded</string>
+    <string name="skip_back_10">Back 10 seconds</string>
+    <string name="skip_forward_10">Forward 10 seconds</string>
+    <string name="skip_back_60">Back 1 minute</string>
+    <string name="skip_forward_60">Forward 1 minute</string>
+    <string name="clip_recording_now">Recording a clip</string>
+    <plurals name="cameras_shown_count">
+        <item quantity="one">%1$d of %2$d camera shown</item>
+        <item quantity="other">%1$d of %2$d cameras shown</item>
+    </plurals>
 </resources>

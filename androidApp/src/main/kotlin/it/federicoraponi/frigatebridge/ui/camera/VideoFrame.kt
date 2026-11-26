@@ -22,6 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.VideoFailure
@@ -44,14 +47,21 @@ internal fun VideoFrame(content: @Composable BoxScope.() -> Unit) {
     )
 }
 
+/** A message in place of the picture. [announce] it when it replaces the picture on its own, e.g. a failure. */
 @Composable
-internal fun OverVideo(text: String) {
+internal fun OverVideo(
+    text: String,
+    announce: Boolean = false,
+) {
     Text(
         text,
         color = Color.White,
         style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
-        modifier = Modifier.padding(Spacing.lg),
+        modifier =
+            Modifier.padding(Spacing.lg).semantics {
+                if (announce) liveRegion = LiveRegionMode.Polite
+            },
     )
 }
 
@@ -74,7 +84,7 @@ internal fun Failure(
                 problem != null -> problemText(problem)
                 else -> stringResource(fallback)
             }
-        OverVideo(text)
+        OverVideo(text, announce = true)
         failure.detail?.takeUnless { isOffline }?.let {
             Text(it, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 3)
         }
