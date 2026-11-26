@@ -18,5 +18,12 @@ sealed interface ExportState {
     ) : ExportState
 }
 
+/**
+ * What went wrong with a video, an export or a command. An unexpected answer carries no [ConnectionProblem]: the
+ * server is already known to be Frigate, so the screen says what failed and shows the detail.
+ */
 internal fun FrigateError.toVideoFailure() =
-    VideoFailure(toProblem(), (this as? FrigateError.UnexpectedResponse)?.detail)
+    VideoFailure(
+        problem = toProblem().takeUnless { it == ConnectionProblem.UnexpectedResponse },
+        detail = (this as? FrigateError.UnexpectedResponse)?.detail,
+    )

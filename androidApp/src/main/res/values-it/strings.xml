@@ -66,6 +66,7 @@
     <string name="video_live">Diretta</string>
     <string name="video_recording">Registrazione</string>
     <string name="video_failed">Video non disponibile</string>
+    <string name="control_failed">Comando non riuscito</string>
     <string name="video_no_recording">Nessuna registrazione nelle ultime 24 ore</string>
     <string name="video_first_frame">Primo fotogramma dopo %1$d ms</string>
     <string name="video_round_trip">Ritardo di rete %1$d ms</string>

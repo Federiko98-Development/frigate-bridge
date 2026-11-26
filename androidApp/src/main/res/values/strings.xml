@@ -67,6 +67,7 @@
     <string name="video_live">Live</string>
     <string name="video_recording">Recording</string>
     <string name="video_failed">Video not available</string>
+    <string name="control_failed">Command not completed</string>
     <string name="video_no_recording">Nothing recorded in the last 24 hours</string>
     <string name="video_first_frame">First frame after %1$d ms</string>
     <string name="video_round_trip">Network delay %1$d ms</string>

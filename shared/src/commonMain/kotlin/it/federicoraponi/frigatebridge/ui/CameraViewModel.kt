@@ -70,6 +70,8 @@ data class CameraState(
     /** What to play when [transport] is HTTPS; `null` while it is being prepared. */
     val httpsStream: HttpsLiveStream? = null,
     val controls: CameraControls = CameraControls(),
+    /** `false` when the configuration file disables recording: there is nothing recorded to offer. */
+    val canRecord: Boolean = true,
     /** `null` for a camera that cannot be moved. */
     val ptz: PtzControls? = null,
     /** The server or the camera does not exist any more: go back. */
@@ -312,6 +314,7 @@ class CameraViewModel(
                                 streams = found.liveStreams,
                                 selectedStream = found.liveStreams.firstOrNull()?.name,
                                 controls = found.controls(connection.snapshot.catalog.canChangeSettings),
+                                canRecord = found.canRecord,
                             )
                         }
                     }

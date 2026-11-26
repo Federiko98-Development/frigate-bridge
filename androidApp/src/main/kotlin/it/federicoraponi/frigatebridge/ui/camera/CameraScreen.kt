@@ -182,7 +182,8 @@ fun CameraRoute(
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ModeSelector(state.mode, viewModel::selectMode)
+            // A screen opened on the recordings, from an event, keeps the way back to them.
+            if (state.canRecord || mode == VideoMode.Recording) ModeSelector(state.mode, viewModel::selectMode)
             VideoFrame { video(content) }
             if (state.mode == VideoMode.Live) {
                 LiveControls(

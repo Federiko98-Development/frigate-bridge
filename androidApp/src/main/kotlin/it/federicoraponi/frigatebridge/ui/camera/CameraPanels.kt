@@ -118,7 +118,7 @@ fun FeaturePanel(
     )
     controls.failure?.let { failure ->
         val problem = failure.problem
-        val text = if (problem != null) problemText(problem) else stringResource(R.string.video_failed)
+        val text = if (problem != null) problemText(problem) else stringResource(R.string.control_failed)
         NoticeCard(message = listOfNotNull(text, failure.detail).joinToString("\n"))
     }
 }
