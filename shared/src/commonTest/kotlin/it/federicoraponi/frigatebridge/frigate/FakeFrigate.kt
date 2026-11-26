@@ -66,6 +66,8 @@ class FakeFrigate(
             "front_door/recordings" -> respond(recordings)
             "front_door/recordings/summary" -> respond("""[{"day": "1970-01-01", "hours": []}]""")
             "review" -> respond(reviews)
+            "review/moment" -> respond(MOMENT)
+            "reviews/viewed" -> respond("""{"success":true,"message":"Marked"}""")
             else -> respond("", HttpStatusCode.NotFound)
         }
     }
@@ -87,6 +89,20 @@ class FakeFrigate(
     }
 
     companion object {
+        /** A review moment of the front door, as `/api/review/{id}` describes it. */
+        val MOMENT =
+            """
+            {
+              "id": "moment",
+              "camera": "front_door",
+              "start_time": 2000.4,
+              "end_time": 2025.6,
+              "severity": "alert",
+              "thumb_path": "/media/frigate/clips/review/moment.webp",
+              "data": {"objects": ["person"], "zones": ["porch"]}
+            }
+            """.trimIndent()
+
         val SAMPLE_CONFIG =
             """
             {

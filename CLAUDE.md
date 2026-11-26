@@ -115,6 +115,8 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   VOD playlist. Frigate leaves the pauses out of the video, so `PlaybackWindow` translates positions into times.
 - Review moments (`/api/review`, always with `after`) mark the timeline and fill the events tab. Their pictures
   and the exports are files served outside `/api` (`/clips/…`, `/exports/…`) that need the same Bearer header.
+- A review moment has its own page: `/api/review/{id}` (which does not say whether it was viewed), played as
+  recordings from 4 s before it to 4 s after it, as Frigate's web interface does.
 - Phase 7 (push notifications) is waiting on a decision: own bridge with Firebase, or Home Assistant.
 
 ## Commands

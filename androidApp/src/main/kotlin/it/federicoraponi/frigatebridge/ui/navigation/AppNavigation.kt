@@ -29,6 +29,7 @@ import it.federicoraponi.frigatebridge.ui.VideoMode
 import it.federicoraponi.frigatebridge.ui.camera.CameraRoute
 import it.federicoraponi.frigatebridge.ui.cameras.CamerasRoute
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
+import it.federicoraponi.frigatebridge.ui.events.EventRoute
 import it.federicoraponi.frigatebridge.ui.events.EventsRoute
 import it.federicoraponi.frigatebridge.ui.recordings.RecordingsRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerFormRoute
@@ -63,6 +64,12 @@ private data class CameraView(
     val recording: Boolean = false,
     /** The moment of the recordings to start from, or 0 for the latest. */
     val startTime: Long = 0,
+)
+
+@Serializable
+private data class EventView(
+    val serverId: String,
+    val reviewId: String,
 )
 
 @Serializable
@@ -159,8 +166,8 @@ private fun AppNavHost(destination: StartDestination) {
         composable<Events> {
             EventsRoute(
                 onShowServers = { navController.showServers() },
-                onOpen = { moment, startTime ->
-                    navController.openCamera(moment.camera, recording = true, startTime = startTime)
+                onOpen = { moment ->
+                    navController.navigate(EventView(moment.serverId, moment.id)) { launchSingleTop = true }
                 },
                 bottomBar = { tabBar(MainTab.Events) },
             )
@@ -184,6 +191,17 @@ private fun AppNavHost(destination: StartDestination) {
                 mode = if (route.recording) VideoMode.Recording else VideoMode.Live,
                 startTime = route.startTime.takeIf { it > 0 },
                 onClose = { navController.popBackStack<CameraView>(inclusive = true) },
+            )
+        }
+        composable<EventView> { entry ->
+            val route = entry.toRoute<EventView>()
+            EventRoute(
+                serverId = route.serverId,
+                reviewId = route.reviewId,
+                onClose = { navController.popBackStack<EventView>(inclusive = true) },
+                onOpenTimeline = { camera, startTime ->
+                    navController.openCamera(camera, recording = true, startTime = startTime)
+                },
             )
         }
         composable<ServerForm> { entry ->

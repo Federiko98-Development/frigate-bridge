@@ -159,6 +159,9 @@ class FrigateApi(
         return decode(get("review?$query"))
     }
 
+    /** One review moment. The answer does not say whether it has been viewed. */
+    suspend fun review(id: String): ReviewDto = decode(get("review/${id.encodeURLPathPart()}"))
+
     suspend fun markReviewed(ids: List<String>) {
         val body =
             buildJsonObject {

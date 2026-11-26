@@ -253,6 +253,8 @@ class ServerSession(
             .map { it.toItem(server.id) }
             .sortedByDescending { it.start }
 
+    suspend fun review(id: String): ReviewItem = connectedApi().review(id).toItem(server.id)
+
     suspend fun markReviewed(ids: List<String>) = connectedApi().markReviewed(ids)
 
     suspend fun mediaFile(serverPath: String): ByteArray = connectedApi().mediaFile(serverPath)

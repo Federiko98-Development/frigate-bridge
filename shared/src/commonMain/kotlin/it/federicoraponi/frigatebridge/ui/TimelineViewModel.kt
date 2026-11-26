@@ -14,7 +14,6 @@ import it.federicoraponi.frigatebridge.server.RecordingClip
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSession
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -143,13 +142,8 @@ class TimelineViewModel(
         mutableState.update { it.copy(export = ExportState.Working) }
         exportJob =
             viewModelScope.launch {
-                val result =
-                    try {
-                        val session = session() ?: return@launch
-                        waitForExport(session, session.startExport(camera.cameraName, start, start + seconds))
-                    } catch (error: FrigateError) {
-                        ExportState.Failed(error.toVideoFailure())
-                    }
+                val session = session() ?: return@launch
+                val result = session.cutExport(camera.cameraName, start, start + seconds)
                 mutableState.update { it.copy(export = result) }
             }
     }
@@ -159,17 +153,6 @@ class TimelineViewModel(
         if (mutableState.value.export !is ExportState.Working) {
             mutableState.update { it.copy(export = ExportState.None) }
         }
-    }
-
-    private suspend fun waitForExport(
-        session: ServerSession,
-        id: String,
-    ): ExportState {
-        repeat(EXPORT_CHECKS) {
-            delay(EXPORT_CHECK_MILLIS)
-            session.exportedFile(id)?.let { return ExportState.Ready(it) }
-        }
-        return ExportState.Failed(VideoFailure(detail = "The server is still working on the export"))
     }
 
     private fun load() {
@@ -285,5 +268,3 @@ class TimelineViewModel(
 private const val WINDOW_SECONDS = 3_600L
 private const val LATEST_LEAD_SECONDS = 60L
 private const val PREVIEW_FRAME_HEIGHT = 180
-private const val EXPORT_CHECK_MILLIS = 2_000L
-private const val EXPORT_CHECKS = 90

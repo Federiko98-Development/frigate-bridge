@@ -65,14 +65,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 
-// How long before its start a moment is shown from.
-private const val LEAD_SECONDS = 2
-
 /** Alerts and detections of the active server. */
 @Composable
 fun EventsRoute(
     onShowServers: () -> Unit,
-    onOpen: (ReviewItem, startTime: Long) -> Unit,
+    onOpen: (ReviewItem) -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: EventsViewModel = koinViewModel(),
 ) {
@@ -86,7 +83,7 @@ fun EventsRoute(
         onShowServers = onShowServers,
         onOpen = {
             viewModel.markViewed(it)
-            onOpen(it, it.start - LEAD_SECONDS)
+            onOpen(it)
         },
         bottomBar = bottomBar,
     )
@@ -231,7 +228,7 @@ private fun Filters(
 
 /** The name of what was seen: translated for the common labels, as Frigate writes it otherwise. */
 @Composable
-private fun labelName(label: String): String {
+internal fun labelName(label: String): String {
     val known =
         mapOf(
             "person" to R.string.label_person,

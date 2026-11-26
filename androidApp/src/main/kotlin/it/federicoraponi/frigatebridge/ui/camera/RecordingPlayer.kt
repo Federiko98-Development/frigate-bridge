@@ -176,7 +176,7 @@ fun RecordingTransport(
 }
 
 @Composable
-private fun SkipButton(
+fun SkipButton(
     label: Int,
     onClick: () -> Unit,
 ) {

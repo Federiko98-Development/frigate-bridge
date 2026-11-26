@@ -4,21 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
@@ -65,10 +60,8 @@ import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.VideoFailure
 import it.federicoraponi.frigatebridge.ui.VideoMode
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
-import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.recordings.RecordingsPanel
 import it.federicoraponi.frigatebridge.ui.recordings.TimelineBar
 import it.federicoraponi.frigatebridge.ui.recordings.TimelineZoom
@@ -340,52 +333,6 @@ private fun FullscreenCamera(
     }
 }
 
-/** The black 16:9 area that every video and its messages share. */
-@Composable
-private fun VideoFrame(content: @Composable BoxScope.() -> Unit) {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(MaterialTheme.shapes.large)
-                .background(Color.Black),
-        contentAlignment = Alignment.Center,
-        content = content,
-    )
-}
-
-@Composable
-private fun OverVideo(text: String) {
-    Text(
-        text,
-        color = Color.White,
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.padding(Spacing.lg),
-    )
-}
-
-@Composable
-private fun Failure(
-    failure: VideoFailure,
-    fallback: Int,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.verticalScroll(rememberScrollState()).padding(Spacing.sm),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-    ) {
-        val problem = failure.problem
-        OverVideo(if (problem != null) problemText(problem) else stringResource(fallback))
-        failure.detail?.let {
-            Text(it, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 3)
-        }
-        PrimaryButton(text = stringResource(R.string.retry), onClick = onRetry)
-    }
-}
-
 @Composable
 private fun ModeSelector(
     selected: VideoMode,
@@ -502,13 +449,5 @@ private fun MuteButton(
             painterResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume_on),
             contentDescription = stringResource(if (muted) R.string.video_unmute else R.string.video_mute),
         )
-    }
-}
-
-@Composable
-private fun FullscreenButton(onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes()) {
-        Icon(painterResource(R.drawable.ic_fullscreen), contentDescription = null)
-        Text(stringResource(R.string.video_fullscreen), modifier = Modifier.padding(start = Spacing.sm))
     }
 }

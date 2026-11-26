@@ -170,4 +170,12 @@
     <string name="label_bird">Uccello</string>
     <string name="label_package">Pacco</string>
     <string name="recordings_open">Apri la timeline</string>
+    <string name="event_open_timeline">Apri nella timeline</string>
+    <string name="event_what">Rilevato</string>
+    <string name="event_kind">Tipo</string>
+    <string name="event_when">Quando</string>
+    <string name="event_duration">Durata</string>
+    <string name="event_zones">Zone</string>
+    <string name="event_alert">Allarme</string>
+    <string name="event_detection">Rilevamento</string>
 </resources>

@@ -10,6 +10,8 @@ import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.ui.CameraArgs
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.EventArgs
+import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
@@ -52,6 +54,11 @@ class SharedViewModelStore : ViewModelStoreOwner {
         cameraName: String,
     ): TimelineViewModel =
         resolve { KoinPlatform.getKoin().get { parametersOf(TimelineArgs(CameraRef(serverId, cameraName))) } }
+
+    fun eventViewModel(
+        serverId: String,
+        reviewId: String,
+    ): EventViewModel = resolve { KoinPlatform.getKoin().get { parametersOf(EventArgs(serverId, reviewId)) } }
 
     fun clear() {
         viewModelStore.clear()

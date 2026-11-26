@@ -8,6 +8,7 @@ import it.federicoraponi.frigatebridge.settings.DataStoreSettingsStore
 import it.federicoraponi.frigatebridge.settings.SettingsStore
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
@@ -35,6 +36,7 @@ val sharedModule =
         viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
         viewModel { parameters -> CameraViewModel(parameters.get(), get()) }
         viewModel { parameters -> TimelineViewModel(parameters.get(), get()) }
+        viewModel { parameters -> EventViewModel(parameters.get(), get()) }
     }
 
 /** Starts Koin. Call it once, when the app launches. */

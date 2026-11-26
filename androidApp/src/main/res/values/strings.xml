@@ -171,4 +171,12 @@
     <string name="label_bird">Bird</string>
     <string name="label_package">Package</string>
     <string name="recordings_open">Open the timeline</string>
+    <string name="event_open_timeline">Open in the timeline</string>
+    <string name="event_what">Seen</string>
+    <string name="event_kind">Type</string>
+    <string name="event_when">When</string>
+    <string name="event_duration">Duration</string>
+    <string name="event_zones">Zones</string>
+    <string name="event_alert">Alert</string>
+    <string name="event_detection">Detection</string>
 </resources>
