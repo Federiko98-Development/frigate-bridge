@@ -11,9 +11,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -22,7 +28,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.camera.CameraRef
+import it.federicoraponi.frigatebridge.ui.EventTarget
 import it.federicoraponi.frigatebridge.ui.StartDestination
 import it.federicoraponi.frigatebridge.ui.StartViewModel
 import it.federicoraponi.frigatebridge.ui.VideoMode
@@ -110,12 +118,28 @@ fun AppNavigation(viewModel: StartViewModel = koinViewModel()) {
     if (destination == null) {
         LoadingContent()
     } else {
-        AppNavHost(destination)
+        AppNavHost(destination, state.target, onLinkHandled = viewModel::linkHandled)
+    }
+    if (state.isLinkRejected) {
+        AlertDialog(
+            onDismissRequest = viewModel::linkHandled,
+            title = { Text(stringResource(R.string.link_rejected_title)) },
+            text = { Text(stringResource(R.string.link_rejected_message)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::linkHandled, shapes = ButtonDefaults.shapes()) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
     }
 }
 
 @Composable
-private fun AppNavHost(destination: StartDestination) {
+private fun AppNavHost(
+    destination: StartDestination,
+    target: EventTarget?,
+    onLinkHandled: () -> Unit,
+) {
     val navController = rememberNavController()
     val start: Any = remember { if (destination == StartDestination.Cameras) Cameras else Servers }
 
@@ -211,6 +235,18 @@ private fun AppNavHost(destination: StartDestination) {
             )
         }
     }
+    LaunchedEffect(target) {
+        if (target != null) {
+            navController.openLinkedEvent(target)
+            onLinkHandled()
+        }
+    }
+}
+
+/** Shows the moment a link asks for, with the cameras of its server underneath so that back leads there. */
+private fun NavHostController.openLinkedEvent(target: EventTarget) {
+    if (!popBackStack<Cameras>(inclusive = false)) navigate(Cameras)
+    navigate(EventView(target.serverId, target.reviewId))
 }
 
 private fun NavHostController.openCamera(

@@ -15,7 +15,33 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 - Cameras and camera groups of the selected server
 - Camera previews in the grid, live view (over HTTPS, or WebRTC), and playback of the last recorded minute
 - Recordings on a timeline, alerts and detections with filters, export and sharing of clips
+- A page for each alert or detection with its video, reachable from a link of another app
+- Keeps what it shows without a network, and reconnects when the phone changes network
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion
+
+## Links to an event
+
+`frigatebridge://event?id=<review id>&server=<address>` opens the app on that alert or detection. The address is one
+of those saved for the server in the app (same host and port); without it the default server is used. Another app
+can send such a link, for example a notification of the Home Assistant companion app (not tried yet):
+
+```yaml
+triggers:
+  - trigger: mqtt
+    topic: frigate/reviews
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.payload_json['type'] == 'new' and trigger.payload_json['after']['severity'] == 'alert' }}
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: Frigate
+      message: "{{ trigger.payload_json['after']['camera'] }}"
+      data:
+        clickAction: >-
+          deep-link://frigatebridge://event?id={{ trigger.payload_json['after']['id'] }}&server=https://frigate.example.com
+```
 
 ## Requirements
 

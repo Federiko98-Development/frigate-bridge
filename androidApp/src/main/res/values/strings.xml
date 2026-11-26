@@ -181,4 +181,6 @@
     <string name="event_detection">Detection</string>
     <string name="offline_title">No network connection</string>
     <string name="offline_message">The app reconnects as soon as the phone is online.</string>
+    <string name="link_rejected_title">This link cannot be opened</string>
+    <string name="link_rejected_message">It does not point to a server saved in this app.</string>
 </resources>

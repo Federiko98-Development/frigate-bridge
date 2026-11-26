@@ -180,4 +180,6 @@
     <string name="event_detection">Rilevamento</string>
     <string name="offline_title">Nessuna connessione di rete</string>
     <string name="offline_message">L\'app si ricollega appena il telefono torna in rete.</string>
+    <string name="link_rejected_title">Impossibile aprire il link</string>
+    <string name="link_rejected_message">Non indica un server salvato in questa app.</string>
 </resources>
