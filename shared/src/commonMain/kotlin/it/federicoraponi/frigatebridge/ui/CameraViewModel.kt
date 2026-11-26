@@ -8,7 +8,6 @@ import it.federicoraponi.frigatebridge.camera.LiveStream
 import it.federicoraponi.frigatebridge.frigate.FrigateError
 import it.federicoraponi.frigatebridge.server.ConnectionState
 import it.federicoraponi.frigatebridge.server.HttpsLiveStream
-import it.federicoraponi.frigatebridge.server.RecordingClip
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSession
 import kotlinx.coroutines.CancellationException
@@ -19,8 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 data class CameraArgs(
     val camera: CameraRef,
@@ -60,21 +57,6 @@ sealed interface LiveState {
     ) : LiveState
 }
 
-sealed interface RecordingState {
-    data object Loading : RecordingState
-
-    data class Ready(
-        val clip: RecordingClip,
-    ) : RecordingState
-
-    /** Nothing was recorded in the past day. */
-    data object Empty : RecordingState
-
-    data class Failed(
-        val failure: VideoFailure,
-    ) : RecordingState
-}
-
 data class CameraState(
     val title: String = "",
     val mode: VideoMode = VideoMode.Live,
@@ -87,7 +69,6 @@ data class CameraState(
     val transport: LiveTransport = LiveTransport.Https,
     /** What to play when [transport] is HTTPS; `null` while it is being prepared. */
     val httpsStream: HttpsLiveStream? = null,
-    val recording: RecordingState = RecordingState.Loading,
     val controls: CameraControls = CameraControls(),
     /** `null` for a camera that cannot be moved. */
     val ptz: PtzControls? = null,
@@ -95,14 +76,13 @@ data class CameraState(
     val isGone: Boolean = false,
 )
 
-/** Live view and latest recording of one camera. */
+/** Live view and controls of one camera. */
 class CameraViewModel(
     args: CameraArgs,
     private val registry: ServerRegistry,
 ) : ViewModel() {
     private val camera = args.camera
     private var liveJob: Job? = null
-    private var recordingJob: Job? = null
     private var httpsJob: Job? = null
     private var httpsFailure: VideoFailure? = null
 
@@ -123,7 +103,7 @@ class CameraViewModel(
                     session()?.sendPtz(camera.cameraName, command)
                     if (command == STOP) stopPending = false
                 } catch (error: FrigateError) {
-                    mutableState.update { it.copy(controls = it.controls.copy(failure = error.toFailure())) }
+                    mutableState.update { it.copy(controls = it.controls.copy(failure = error.toVideoFailure())) }
                 }
             }
         }
@@ -146,7 +126,7 @@ class CameraViewModel(
             try {
                 session.setCameraFeature(camera.cameraName, feature, enabled)
             } catch (error: FrigateError) {
-                failure = error.toFailure()
+                failure = error.toVideoFailure()
             }
             val snapshot = (session.state.value as? ConnectionState.Connected)?.snapshot
             val current = snapshot?.catalog?.cameras?.firstOrNull { it.ref == camera }
@@ -210,7 +190,8 @@ class CameraViewModel(
     fun selectMode(mode: VideoMode) {
         if (mode == mutableState.value.mode) return
         mutableState.update { it.copy(mode = mode) }
-        if (mode == VideoMode.Live) startLive() else loadRecording()
+        // The recordings have their own ViewModel.
+        if (mode == VideoMode.Live) startLive() else stopLive()
     }
 
     fun selectStream(name: String) {
@@ -232,7 +213,7 @@ class CameraViewModel(
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: FrigateError) {
-                    liveFailed(error.toFailure())
+                    liveFailed(error.toVideoFailure())
                 } catch (error: Exception) {
                     // The platform's WebRTC library refused the offer or the answer.
                     liveFailed(VideoFailure(detail = error.message))
@@ -271,7 +252,6 @@ class CameraViewModel(
         when {
             current.streams.isEmpty() -> loadCamera()
             current.mode == VideoMode.Live -> startLive()
-            else -> loadRecording()
         }
     }
 
@@ -296,7 +276,7 @@ class CameraViewModel(
                     mutableState.update { it.copy(httpsStream = source) }
                 } catch (error: FrigateError) {
                     // WebRTC asks the same server, so it would fail the same way.
-                    mutableState.update { it.copy(live = LiveState.Failed(error.toFailure())) }
+                    mutableState.update { it.copy(live = LiveState.Failed(error.toVideoFailure())) }
                 }
             }
     }
@@ -337,36 +317,13 @@ class CameraViewModel(
                     }
                     if (found != null) {
                         if (found.hasPtz) loadPtz(session)
-                        if (mutableState.value.mode == VideoMode.Live) startLive() else loadRecording()
+                        if (mutableState.value.mode == VideoMode.Live) startLive()
                     }
                 }
-                is ConnectionState.Failed -> liveFailed(connection.error.toFailure())
+                is ConnectionState.Failed -> liveFailed(connection.error.toVideoFailure())
                 ConnectionState.Idle, ConnectionState.Connecting -> Unit
             }
         }
-    }
-
-    @OptIn(ExperimentalTime::class)
-    private fun loadRecording() {
-        recordingJob?.cancel()
-        mutableState.update { it.copy(recording = RecordingState.Loading) }
-        recordingJob =
-            viewModelScope.launch {
-                val result =
-                    try {
-                        val session = session() ?: return@launch
-                        val clip = session.latestRecording(camera.cameraName, Clock.System.now().epochSeconds)
-                        if (clip == null) RecordingState.Empty else RecordingState.Ready(clip)
-                    } catch (error: FrigateError) {
-                        RecordingState.Failed(error.toFailure())
-                    }
-                mutableState.update { it.copy(recording = result) }
-            }
-    }
-
-    /** The player could not play the clip. */
-    fun recordingFailed(detail: String?) {
-        mutableState.update { it.copy(recording = RecordingState.Failed(VideoFailure(detail = detail))) }
     }
 
     private fun session(): ServerSession? {
@@ -374,8 +331,6 @@ class CameraViewModel(
         if (session == null) mutableState.update { it.copy(isGone = true) }
         return session
     }
-
-    private fun FrigateError.toFailure() = VideoFailure(toProblem(), (this as? FrigateError.UnexpectedResponse)?.detail)
 }
 
 private const val STOP = "STOP"

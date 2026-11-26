@@ -10,11 +10,14 @@ import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.ui.CameraArgs
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.EventsViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
 import it.federicoraponi.frigatebridge.ui.SettingsViewModel
 import it.federicoraponi.frigatebridge.ui.StartViewModel
+import it.federicoraponi.frigatebridge.ui.TimelineArgs
+import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.mp.KoinPlatform
 
@@ -33,6 +36,8 @@ class SharedViewModelStore : ViewModelStoreOwner {
 
     fun settingsViewModel(): SettingsViewModel = resolve { KoinPlatform.getKoin().get() }
 
+    fun eventsViewModel(): EventsViewModel = resolve { KoinPlatform.getKoin().get() }
+
     fun serverFormViewModel(serverId: String?): ServerFormViewModel =
         resolve { KoinPlatform.getKoin().get { parametersOf(ServerFormArgs(serverId)) } }
 
@@ -41,6 +46,12 @@ class SharedViewModelStore : ViewModelStoreOwner {
         cameraName: String,
     ): CameraViewModel =
         resolve { KoinPlatform.getKoin().get { parametersOf(CameraArgs(CameraRef(serverId, cameraName))) } }
+
+    fun timelineViewModel(
+        serverId: String,
+        cameraName: String,
+    ): TimelineViewModel =
+        resolve { KoinPlatform.getKoin().get { parametersOf(TimelineArgs(CameraRef(serverId, cameraName))) } }
 
     fun clear() {
         viewModelStore.clear()

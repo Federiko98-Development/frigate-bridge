@@ -75,7 +75,9 @@ fun RecordingsScreen(
     Scaffold(
         modifier = modifier,
         bottomBar = bottomBar,
-        topBar = { TopAppBar(title = { ServerSwitcher(state, actions) }) },
+        topBar = {
+            TopAppBar(title = { ServerSwitcher(state.server, state.servers, actions.switchTo, actions.showServers) })
+        },
     ) { innerPadding ->
         RefreshableContent(
             isRefreshing = state.isRefreshing,
@@ -128,7 +130,7 @@ private fun CameraRecordings(
                 },
                 supportingContent = {
                     val text =
-                        if (camera.isRecording) R.string.recordings_last_minute else R.string.recordings_off
+                        if (camera.isRecording) R.string.recordings_open else R.string.recordings_off
                     Text(stringResource(text), style = MaterialTheme.typography.bodySmall)
                 },
             ) { Text(camera.displayName, style = MaterialTheme.typography.titleSmallEmphasized) }

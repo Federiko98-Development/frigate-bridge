@@ -2,9 +2,7 @@ package it.federicoraponi.frigatebridge.ui.camera
 
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -13,8 +11,6 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -43,23 +39,30 @@ import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.server.RecordingClip
 import it.federicoraponi.frigatebridge.server.acceptingCertificate
+import it.federicoraponi.frigatebridge.ui.SeekRequest
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
-import java.text.DateFormat
-import java.util.Date
 
-private const val POSITION_INTERVAL_MILLIS = 250L
-private const val SEEK_MILLIS = 10_000L
+private const val POSITION_INTERVAL_MILLIS = 500L
 
-/** A player for the recorded interval, that downloads it with the server's token and accepted certificate. */
+/**
+ * A player for a stretch of recordings, that downloads it with the server's token and accepted certificate.
+ * It moves where [seek] asks, and reports where it is while playing.
+ */
 @OptIn(UnstableApi::class)
 @Composable
 fun rememberRecordingPlayer(
     clip: RecordingClip,
+    seek: SeekRequest,
+    speed: Float,
+    onPosition: (Long) -> Unit,
+    onEnded: () -> Unit,
     onError: (String) -> Unit,
 ): ExoPlayer {
     val context = LocalContext.current
+    val position by rememberUpdatedState(onPosition)
+    val ended by rememberUpdatedState(onEnded)
     val failed by rememberUpdatedState(onError)
     val player =
         remember(clip) {
@@ -70,7 +73,7 @@ fun rememberRecordingPlayer(
                 .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(data))
                 .build()
                 .apply {
-                    setMediaItem(MediaItem.fromUri(clip.url))
+                    setMediaItem(MediaItem.fromUri(clip.url), seek.positionMillis)
                     prepare()
                     playWhenReady = true
                 }
@@ -78,6 +81,10 @@ fun rememberRecordingPlayer(
     DisposableEffect(player) {
         val listener =
             object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) ended()
+                }
+
                 override fun onPlayerError(error: PlaybackException) {
                     failed(listOfNotNull(error.errorCodeName, error.cause?.message).joinToString(": "))
                 }
@@ -86,6 +93,17 @@ fun rememberRecordingPlayer(
         onDispose {
             player.removeListener(listener)
             player.release()
+        }
+    }
+    LaunchedEffect(player, seek.id) {
+        player.seekTo(seek.positionMillis)
+        player.play()
+    }
+    LaunchedEffect(player, speed) { player.setPlaybackSpeed(speed) }
+    LaunchedEffect(player) {
+        while (true) {
+            delay(POSITION_INTERVAL_MILLIS)
+            if (player.isPlaying) position(player.currentPosition)
         }
     }
     LifecycleStartEffect(player) { onStopOrDispose { player.pause() } }
@@ -102,68 +120,69 @@ fun RecordingPicture(
     ContentFrame(player = player, surfaceType = SURFACE_TYPE_TEXTURE_VIEW, modifier = modifier)
 }
 
+/** Play and pause. */
 @Composable
-fun RecordingControls(
-    clip: RecordingClip,
-    player: Player,
+fun PlayButton(
+    player: Player?,
     modifier: Modifier = Modifier,
 ) {
-    var progress by remember(player) { mutableStateOf(0f) }
     var playing by remember(player) { mutableStateOf(false) }
     LaunchedEffect(player) {
-        while (true) {
-            val duration = player.duration
-            progress = if (duration > 0) (player.currentPosition.toFloat() / duration).coerceIn(0f, 1f) else 0f
-            playing = player.isPlaying
-            delay(POSITION_INTERVAL_MILLIS)
+        while (player != null) {
+            // What the user asked for, also while the video is still loading.
+            playing = player.playWhenReady && player.playbackState != Player.STATE_ENDED
+            delay(POSITION_INTERVAL_MILLIS / 2)
         }
     }
-    val time = remember { DateFormat.getTimeInstance(DateFormat.MEDIUM) }
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            stringResource(
-                R.string.video_recorded_from,
-                time.format(Date(clip.startTime * 1_000)),
-                time.format(Date(clip.endTime * 1_000)),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        LinearWavyProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilledTonalButton(
-                onClick = { player.seekTo((player.currentPosition - SEEK_MILLIS).coerceAtLeast(0)) },
-                shapes = ButtonDefaults.shapes(),
-            ) { Text(stringResource(R.string.video_back_10)) }
-            FilledIconButton(
-                onClick = {
-                    if (player.isPlaying) {
-                        player.pause()
-                    } else {
-                        // At the end, play starts again from the beginning.
-                        if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
-                        player.play()
-                    }
-                },
-                shapes = IconButtonDefaults.shapes(),
-                modifier = Modifier.size(56.dp),
-            ) {
-                if (playing) {
-                    Icon(painterResource(R.drawable.ic_pause), stringResource(R.string.video_pause))
-                } else {
-                    Icon(Icons.Filled.PlayArrow, stringResource(R.string.video_play))
-                }
+    FilledIconButton(
+        enabled = player != null,
+        onClick = {
+            if (player == null) return@FilledIconButton
+            if (playing) {
+                player.pause()
+            } else {
+                if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
+                player.play()
             }
-            FilledTonalButton(
-                onClick = { player.seekTo(player.currentPosition + SEEK_MILLIS) },
-                shapes = ButtonDefaults.shapes(),
-            ) { Text(stringResource(R.string.video_forward_10)) }
+            playing = !playing
+        },
+        shapes = IconButtonDefaults.shapes(),
+        modifier = modifier.size(56.dp),
+    ) {
+        if (playing) {
+            Icon(painterResource(R.drawable.ic_pause), stringResource(R.string.video_pause))
+        } else {
+            Icon(Icons.Filled.PlayArrow, stringResource(R.string.video_play))
         }
     }
+}
+
+/** Play and pause with jumps of ten seconds and a minute. */
+@Composable
+fun RecordingTransport(
+    player: Player?,
+    onSkip: (Int) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SkipButton(R.string.video_back_60) { onSkip(-60) }
+        SkipButton(R.string.video_back_10) { onSkip(-10) }
+        PlayButton(player)
+        SkipButton(R.string.video_forward_10) { onSkip(10) }
+        SkipButton(R.string.video_forward_60) { onSkip(60) }
+    }
+}
+
+@Composable
+private fun SkipButton(
+    label: Int,
+    onClick: () -> Unit,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        shapes = ButtonDefaults.shapes(),
+        contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.ExtraSmallContainerHeight),
+    ) { Text(stringResource(label)) }
 }

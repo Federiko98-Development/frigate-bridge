@@ -22,8 +22,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 data class Credentials(
     val username: String,
@@ -39,6 +41,10 @@ interface TokenStore {
 
 private const val MAX_ERROR_LENGTH = 200
 private const val PREVIEW_QUALITY = 60
+private const val API_ROOT = "api/"
+
+// Where Frigate keeps the files that its web server publishes at the top level.
+private const val MEDIA_ROOT = "/media/frigate/"
 
 internal val frigateJson =
     Json {
@@ -104,9 +110,10 @@ class FrigateApi(
     suspend fun latestFrame(
         camera: String,
         height: Int,
-    ): ByteArray {
-        val path = "${camera.encodeURLPathPart()}/latest.jpg?height=$height&quality=$PREVIEW_QUALITY"
-        val response = authorized(HttpMethod.Get, path)
+    ): ByteArray = bytes("api/${camera.encodeURLPathPart()}/latest.jpg?height=$height&quality=$PREVIEW_QUALITY")
+
+    private suspend fun bytes(path: String): ByteArray {
+        val response = authorized(HttpMethod.Get, path, root = "")
         return transport { response.readRawBytes() }
     }
 
@@ -116,6 +123,70 @@ class FrigateApi(
         after: Long,
         before: Long,
     ): List<RecordingDto> = decode(get("${camera.encodeURLPathPart()}/recordings?after=$after&before=$before"))
+
+    /** The days with recordings of [camera], in the time zone [zoneId]. */
+    suspend fun recordingDays(
+        camera: String,
+        zoneId: String,
+    ): List<RecordingDayDto> =
+        decode(get("${camera.encodeURLPathPart()}/recordings/summary?timezone=${zoneId.encodeURLParameter()}"))
+
+    /** The frame recorded at [time], as a JPEG [height] pixels high. */
+    suspend fun recordedFrame(
+        camera: String,
+        time: Long,
+        height: Int,
+    ): ByteArray = bytes("api/${camera.encodeURLPathPart()}/recordings/$time/snapshot.jpg?height=$height")
+
+    /** Review moments between two times, newest first. [cameras] and [labels] are `null` for all of them. */
+    suspend fun reviews(
+        after: Long,
+        before: Long,
+        cameras: List<String>? = null,
+        labels: List<String>? = null,
+        severity: String? = null,
+        limit: Int? = null,
+    ): List<ReviewDto> {
+        val query =
+            listOfNotNull(
+                "after=$after",
+                "before=$before",
+                cameras?.let { "cameras=${it.joinToString(",").encodeURLParameter()}" },
+                labels?.let { "labels=${it.joinToString(",").encodeURLParameter()}" },
+                severity?.let { "severity=$it" },
+                limit?.let { "limit=$it" },
+            ).joinToString("&")
+        return decode(get("review?$query"))
+    }
+
+    suspend fun markReviewed(ids: List<String>) {
+        val body =
+            buildJsonObject {
+                putJsonArray("ids") { ids.forEach { add(it) } }
+                put("reviewed", true)
+            }
+        call(HttpMethod.Post, "reviews/viewed", body.toString())
+    }
+
+    /** Asks the server to cut a video file of an interval. It is made in the background. */
+    suspend fun startExport(
+        camera: String,
+        start: Long,
+        end: Long,
+    ): StartedExportDto =
+        decode(call(HttpMethod.Post, "export/${camera.encodeURLPathPart()}/start/$start/end/$end", "{}"))
+
+    suspend fun export(id: String): ExportDto = decode(get("exports/${id.encodeURLPathPart()}"))
+
+    /**
+     * The address of a file the server stores, such as a thumbnail or an export, given its path on the server
+     * (`/media/frigate/clips/…`). Such files are served outside `/api` and need [authorizationHeaders].
+     */
+    fun mediaUrl(serverPath: String): String =
+        "${baseUrl.trimEnd('/')}/${serverPath.removePrefix(MEDIA_ROOT).trimStart('/')}"
+
+    /** The bytes of a file the server stores. */
+    suspend fun mediaFile(serverPath: String): ByteArray = bytes(serverPath.removePrefix(MEDIA_ROOT).trimStart('/'))
 
     /** Sends a WebRTC offer for a go2rtc [stream] and returns the answer. */
     suspend fun webRtcAnswer(
@@ -168,19 +239,20 @@ class FrigateApi(
         method: HttpMethod,
         path: String,
         jsonBody: String? = null,
+        root: String = API_ROOT,
     ): HttpResponse {
         val usedToken = tokens.read()
-        var response = send(method, path, usedToken, jsonBody)
+        var response = send(method, path, usedToken, jsonBody, root)
         if (response.status == HttpStatusCode.Unauthorized) {
             val freshToken = renewToken(staleToken = usedToken)
-            response = send(method, path, freshToken, jsonBody)
+            response = send(method, path, freshToken, jsonBody, root)
             if (response.status == HttpStatusCode.Unauthorized) throw FrigateError.LoginRejected()
         }
         if (!response.status.isSuccess()) {
             // The server's explanation helps, e.g. go2rtc saying that no codec matches.
             val reason = transport { response.bodyAsText() }.trim().take(MAX_ERROR_LENGTH)
             val endpoint = path.substringBefore('?')
-            throw FrigateError.UnexpectedResponse("HTTP ${response.status.value} on /api/$endpoint $reason".trim())
+            throw FrigateError.UnexpectedResponse("HTTP ${response.status.value} on /$root$endpoint $reason".trim())
         }
         return response
     }
@@ -229,9 +301,10 @@ class FrigateApi(
         path: String,
         token: String?,
         jsonBody: String? = null,
+        root: String = API_ROOT,
     ): HttpResponse =
         transport {
-            http.request("${baseUrl.trimEnd('/')}/api/$path") {
+            http.request("${baseUrl.trimEnd('/')}/$root$path") {
                 this.method = method
                 if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
                 if (method != HttpMethod.Get) header("X-CSRF-TOKEN", "1")

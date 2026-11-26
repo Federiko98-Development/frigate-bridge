@@ -3,14 +3,21 @@ package it.federicoraponi.frigatebridge.server
 import io.ktor.client.HttpClient
 import it.federicoraponi.frigatebridge.camera.CameraCatalog
 import it.federicoraponi.frigatebridge.camera.CameraFeature
+import it.federicoraponi.frigatebridge.camera.CameraRef
 import it.federicoraponi.frigatebridge.camera.cameraCatalog
 import it.federicoraponi.frigatebridge.frigate.Credentials
 import it.federicoraponi.frigatebridge.frigate.FrigateApi
 import it.federicoraponi.frigatebridge.frigate.FrigateError
 import it.federicoraponi.frigatebridge.frigate.FrigateSocket
 import it.federicoraponi.frigatebridge.frigate.PtzInfoDto
+import it.federicoraponi.frigatebridge.frigate.ReviewDto
 import it.federicoraponi.frigatebridge.frigate.TokenStore
 import it.federicoraponi.frigatebridge.frigate.isSupportedFrigateVersion
+import it.federicoraponi.frigatebridge.recordings.RecordingDay
+import it.federicoraponi.frigatebridge.recordings.RecordingSegment
+import it.federicoraponi.frigatebridge.recordings.ReviewItem
+import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
+import it.federicoraponi.frigatebridge.recordings.recordingDay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,9 +55,27 @@ data class RecordingClip(
     val endTime: Long,
 )
 
-private const val CLIP_SECONDS = 60L
-private const val SECONDS_PER_HOUR = 3_600L
-private const val SECONDS_PER_DAY = 86_400L
+/** An export ready to be downloaded. */
+data class ExportedFile(
+    val url: String,
+    val fileName: String,
+    val headers: Map<String, String>,
+    val certificateSha256: String?,
+)
+
+private fun ReviewDto.toItem(serverId: String) =
+    ReviewItem(
+        serverId = serverId,
+        id = id,
+        camera = CameraRef(serverId, camera),
+        start = startTime.toLong(),
+        end = endTime?.toLong(),
+        severity = if (severity == "alert") ReviewSeverity.Alert else ReviewSeverity.Detection,
+        labels = (data.objects + data.audio).map { it.removeSuffix("-verified") }.distinct(),
+        zones = data.zones,
+        thumbnailPath = thumbPath,
+        isViewed = hasBeenReviewed,
+    )
 
 sealed interface ConnectionState {
     data object Idle : ConnectionState
@@ -173,26 +198,86 @@ class ServerSession(
         height: Int,
     ): ByteArray = connectedApi().latestFrame(camera, height)
 
-    /** The last minute recorded by a camera, or `null` if it recorded nothing in the past day. */
-    suspend fun latestRecording(
+    /** The days with recordings of a camera, newest first. */
+    suspend fun recordingDays(
         camera: String,
-        now: Long,
-    ): RecordingClip? {
+        zoneId: String,
+    ): List<RecordingDay> =
+        connectedApi()
+            .recordingDays(camera, zoneId)
+            .mapNotNull { recordingDay(it.day, zoneId) }
+            .sortedByDescending { it.start }
+
+    suspend fun recordingSegments(
+        camera: String,
+        after: Long,
+        before: Long,
+    ): List<RecordingSegment> =
+        connectedApi().recordings(camera, after, before).map {
+            RecordingSegment(it.startTime, it.endTime, it.duration ?: (it.endTime - it.startTime))
+        }
+
+    /** What a player needs for the video of an interval of recordings. */
+    suspend fun recordingClip(
+        camera: String,
+        start: Long,
+        end: Long,
+    ): RecordingClip {
         val api = connectedApi()
-        // The past hour is usually enough and far smaller than a whole day of segments.
-        val segments =
-            api.recordings(camera, now - SECONDS_PER_HOUR, now).ifEmpty {
-                api.recordings(camera, now - SECONDS_PER_DAY, now)
-            }
-        val last = segments.maxByOrNull { it.endTime } ?: return null
-        val end = last.endTime.toLong()
-        val start = maxOf(segments.minOf { it.startTime }.toLong(), end - CLIP_SECONDS)
         return RecordingClip(
             url = api.recordingPlaylistUrl(camera, start, end),
             headers = api.authorizationHeaders(),
             certificateSha256 = server.certificateSha256,
             startTime = start,
             endTime = end,
+        )
+    }
+
+    suspend fun recordedFrame(
+        camera: String,
+        time: Long,
+        height: Int,
+    ): ByteArray = connectedApi().recordedFrame(camera, time, height)
+
+    /** Review moments between two times, newest first. */
+    suspend fun reviews(
+        after: Long,
+        before: Long,
+        cameras: List<String>? = null,
+        labels: List<String>? = null,
+        severity: ReviewSeverity? = null,
+        limit: Int? = null,
+    ): List<ReviewItem> =
+        connectedApi()
+            .reviews(after, before, cameras, labels, severity?.name?.lowercase(), limit)
+            .map { it.toItem(server.id) }
+            .sortedByDescending { it.start }
+
+    suspend fun markReviewed(ids: List<String>) = connectedApi().markReviewed(ids)
+
+    suspend fun mediaFile(serverPath: String): ByteArray = connectedApi().mediaFile(serverPath)
+
+    /** Asks the server for a video file of an interval and returns the identifier of the export. */
+    suspend fun startExport(
+        camera: String,
+        start: Long,
+        end: Long,
+    ): String {
+        val started = connectedApi().startExport(camera, start, end)
+        return started.exportId?.takeIf { started.success }
+            ?: throw FrigateError.UnexpectedResponse(started.message.ifBlank { "the export was not started" })
+    }
+
+    /** How to download an export, or `null` while the server is still making it. */
+    suspend fun exportedFile(id: String): ExportedFile? {
+        val api = connectedApi()
+        val export = api.export(id)
+        if (export.inProgress || export.videoPath.isBlank()) return null
+        return ExportedFile(
+            url = api.mediaUrl(export.videoPath),
+            fileName = export.videoPath.substringAfterLast('/'),
+            headers = api.authorizationHeaders(),
+            certificateSha256 = server.certificateSha256,
         )
     }
 

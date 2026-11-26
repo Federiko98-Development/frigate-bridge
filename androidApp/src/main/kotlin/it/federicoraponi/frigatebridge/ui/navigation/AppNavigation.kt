@@ -29,6 +29,7 @@ import it.federicoraponi.frigatebridge.ui.VideoMode
 import it.federicoraponi.frigatebridge.ui.camera.CameraRoute
 import it.federicoraponi.frigatebridge.ui.cameras.CamerasRoute
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
+import it.federicoraponi.frigatebridge.ui.events.EventsRoute
 import it.federicoraponi.frigatebridge.ui.recordings.RecordingsRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerFormRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerListRoute
@@ -46,6 +47,9 @@ private data object Cameras
 private data object Recordings
 
 @Serializable
+private data object Events
+
+@Serializable
 private data object SettingsTab
 
 /** The settings opened from the server list, outside any server. */
@@ -57,6 +61,8 @@ private data class CameraView(
     val serverId: String,
     val cameraName: String,
     val recording: Boolean = false,
+    /** The moment of the recordings to start from, or 0 for the latest. */
+    val startTime: Long = 0,
 )
 
 @Serializable
@@ -85,7 +91,7 @@ private fun tabExit(): ExitTransition = fadeOut(tween(durationMillis = 90))
 
 private val NavBackStackEntry.isTab: Boolean
     get() =
-        destination.hasRoute<Cameras>() || destination.hasRoute<Recordings>() || destination.hasRoute<SettingsTab>()
+        listOf(Cameras::class, Recordings::class, Events::class, SettingsTab::class).any { destination.hasRoute(it) }
 
 private val AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs: Boolean
     get() = initialState.isTab && targetState.isTab
@@ -150,6 +156,15 @@ private fun AppNavHost(destination: StartDestination) {
                 bottomBar = { tabBar(MainTab.Recordings) },
             )
         }
+        composable<Events> {
+            EventsRoute(
+                onShowServers = { navController.showServers() },
+                onOpen = { moment, startTime ->
+                    navController.openCamera(moment.camera, recording = true, startTime = startTime)
+                },
+                bottomBar = { tabBar(MainTab.Events) },
+            )
+        }
         composable<SettingsTab> {
             SettingsRoute(
                 onManageServers = { navController.showServers() },
@@ -167,6 +182,7 @@ private fun AppNavHost(destination: StartDestination) {
             CameraRoute(
                 camera = CameraRef(route.serverId, route.cameraName),
                 mode = if (route.recording) VideoMode.Recording else VideoMode.Live,
+                startTime = route.startTime.takeIf { it > 0 },
                 onClose = { navController.popBackStack<CameraView>(inclusive = true) },
             )
         }
@@ -182,8 +198,9 @@ private fun AppNavHost(destination: StartDestination) {
 private fun NavHostController.openCamera(
     camera: CameraRef,
     recording: Boolean,
+    startTime: Long = 0,
 ) {
-    navigate(CameraView(camera.serverId, camera.cameraName, recording)) { launchSingleTop = true }
+    navigate(CameraView(camera.serverId, camera.cameraName, recording, startTime)) { launchSingleTop = true }
 }
 
 /** Moves between tabs, keeping the cameras underneath so that back always returns to them. */
@@ -192,7 +209,12 @@ private fun NavHostController.openTab(tab: MainTab) {
         popBackStack<Cameras>(inclusive = false)
         return
     }
-    val route: Any = if (tab == MainTab.Recordings) Recordings else SettingsTab
+    val route: Any =
+        when (tab) {
+            MainTab.Recordings -> Recordings
+            MainTab.Events -> Events
+            else -> SettingsTab
+        }
     navigate(route) {
         popUpTo<Cameras> { saveState = true }
         launchSingleTop = true

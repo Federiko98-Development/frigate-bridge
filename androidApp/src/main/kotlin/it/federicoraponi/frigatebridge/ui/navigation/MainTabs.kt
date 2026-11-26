@@ -1,6 +1,7 @@
 package it.federicoraponi.frigatebridge.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ShortNavigationBar
@@ -15,6 +16,7 @@ import it.federicoraponi.frigatebridge.R
 enum class MainTab {
     Cameras,
     Recordings,
+    Events,
     Settings,
 }
 
@@ -30,6 +32,7 @@ fun MainTabBar(
                     when (tab) {
                         MainTab.Cameras -> R.string.tab_cameras
                         MainTab.Recordings -> R.string.tab_recordings
+                        MainTab.Events -> R.string.tab_events
                         MainTab.Settings -> R.string.settings_title
                     },
                 )
@@ -41,6 +44,7 @@ fun MainTabBar(
                     when (tab) {
                         MainTab.Cameras -> Icon(painterResource(R.drawable.ic_videocam), contentDescription = null)
                         MainTab.Recordings -> Icon(painterResource(R.drawable.ic_movie), contentDescription = null)
+                        MainTab.Events -> Icon(Icons.Filled.Notifications, contentDescription = null)
                         MainTab.Settings -> Icon(Icons.Filled.Settings, contentDescription = null)
                     }
                 },

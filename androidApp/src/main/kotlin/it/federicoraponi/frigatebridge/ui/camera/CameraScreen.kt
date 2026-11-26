@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,7 +58,10 @@ import it.federicoraponi.frigatebridge.ui.CameraState
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.LiveState
 import it.federicoraponi.frigatebridge.ui.LiveTransport
-import it.federicoraponi.frigatebridge.ui.RecordingState
+import it.federicoraponi.frigatebridge.ui.PlaybackState
+import it.federicoraponi.frigatebridge.ui.TimelineArgs
+import it.federicoraponi.frigatebridge.ui.TimelineState
+import it.federicoraponi.frigatebridge.ui.TimelineViewModel
 import it.federicoraponi.frigatebridge.ui.VideoFailure
 import it.federicoraponi.frigatebridge.ui.VideoMode
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
@@ -64,6 +69,9 @@ import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
+import it.federicoraponi.frigatebridge.ui.recordings.RecordingsPanel
+import it.federicoraponi.frigatebridge.ui.recordings.TimelineBar
+import it.federicoraponi.frigatebridge.ui.recordings.TimelineZoom
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -73,6 +81,8 @@ fun CameraRoute(
     camera: CameraRef,
     onClose: () -> Unit,
     mode: VideoMode = VideoMode.Live,
+    /** The moment of the recordings to start from. */
+    startTime: Long? = null,
     viewModel: CameraViewModel = koinViewModel { parametersOf(CameraArgs(camera, mode)) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -89,10 +99,26 @@ fun CameraRoute(
         view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
     }
-    val recording = state.recording
+    // Created only when the recordings are first shown.
+    val timeline: TimelineViewModel? =
+        if (state.mode == VideoMode.Recording) {
+            koinViewModel { parametersOf(TimelineArgs(camera, startTime)) }
+        } else {
+            null
+        }
+    val recordings = timeline?.state?.collectAsStateWithLifecycle()?.value
+    var speed by rememberSaveable { mutableFloatStateOf(1f) }
+    val ready = recordings?.playback as? PlaybackState.Ready
     val player =
-        if (state.mode == VideoMode.Recording && recording is RecordingState.Ready) {
-            rememberRecordingPlayer(recording.clip, onError = viewModel::recordingFailed)
+        if (timeline != null && ready != null) {
+            rememberRecordingPlayer(
+                clip = ready.clip,
+                seek = ready.seek,
+                speed = speed,
+                onPosition = timeline::playerAt,
+                onEnded = timeline::playerEnded,
+                onError = timeline::playerFailed,
+            )
         } else {
             null
         }
@@ -108,6 +134,8 @@ fun CameraRoute(
             state = state,
             muted = muted,
             player = player,
+            playback = recordings?.playback,
+            onRetryRecording = { timeline?.retry() },
             onMeasures = { measures = it },
         )
 
@@ -121,6 +149,11 @@ fun CameraRoute(
             onExit = { fullscreen = false },
             viewModel = viewModel,
             hasAudio = measures.hasAudio != false,
+            recordings = {
+                if (timeline != null && recordings != null) {
+                    FullscreenTimeline(recordings, timeline, player)
+                }
+            },
         ) { video(content) }
         return
     }
@@ -163,11 +196,9 @@ fun CameraRoute(
                 state.ptz?.let {
                     PtzPanel(it, viewModel::startMoving, viewModel::stopMoving, viewModel::goToPreset)
                 }
-            } else {
-                if (player != null && recording is RecordingState.Ready) {
-                    RecordingControls(recording.clip, player)
-                }
+            } else if (timeline != null && recordings != null) {
                 FullscreenButton { fullscreen = true }
+                RecordingsPanel(recordings, timeline, player, speed, onSpeed = { speed = it })
             }
             // Only administrators may change camera settings, and they do not belong with the recordings.
             if (state.mode == VideoMode.Live && state.controls.isAllowed && state.streams.isNotEmpty()) {
@@ -182,6 +213,8 @@ private data class VideoContent(
     val state: CameraState,
     val muted: Boolean,
     val player: Player?,
+    val playback: PlaybackState?,
+    val onRetryRecording: () -> Unit,
     val onMeasures: (LiveMeasures) -> Unit,
 )
 
@@ -233,12 +266,13 @@ private fun Video(
                 }
             }
             VideoMode.Recording ->
-                when (val recording = state.recording) {
-                    is RecordingState.Ready ->
+                when (val playback = content.playback) {
+                    is PlaybackState.Ready ->
                         content.player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
-                    RecordingState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
-                    is RecordingState.Failed -> Failure(recording.failure, R.string.video_failed, viewModel::retry)
-                    RecordingState.Loading -> ContainedLoadingIndicator()
+                    PlaybackState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
+                    is PlaybackState.Failed ->
+                        Failure(playback.failure, R.string.video_failed, content.onRetryRecording)
+                    PlaybackState.Loading, null -> ContainedLoadingIndicator()
                 }
         }
     }
@@ -253,6 +287,7 @@ private fun FullscreenCamera(
     onExit: () -> Unit,
     viewModel: CameraViewModel,
     hasAudio: Boolean,
+    recordings: @Composable () -> Unit,
     video: @Composable () -> Unit,
 ) {
     val overlay = Color.Black.copy(alpha = 0.45f)
@@ -273,6 +308,9 @@ private fun FullscreenCamera(
             }
             if (state.mode == VideoMode.Live && state.streams.size > 1) {
                 StreamChoice(state, viewModel::selectStream, Modifier.align(Alignment.TopStart))
+            }
+            if (state.mode == VideoMode.Recording) {
+                Box(modifier = Modifier.align(Alignment.BottomCenter)) { recordings() }
             }
             val ptz = state.ptz
             if (state.mode == VideoMode.Live && ptz != null) {
@@ -397,6 +435,38 @@ private fun LiveControls(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** The timeline over the full screen video, on a veil that keeps it readable. */
+@Composable
+private fun FullscreenTimeline(
+    state: TimelineState,
+    viewModel: TimelineViewModel,
+    player: Player?,
+) {
+    val day = state.day ?: return
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+    ) {
+        Row(
+            modifier = Modifier.padding(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            PlayButton(player)
+            TimelineBar(
+                day = day,
+                ranges = state.ranges,
+                markers = state.markers,
+                time = state.time,
+                zoom = TimelineZoom.Minutes,
+                onSeek = viewModel::seekTo,
+                preview = viewModel::preview,
+                modifier = Modifier.weight(1f),
             )
         }
     }

@@ -27,6 +27,7 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.navigation.compose)
     // 1.1.x crashes when a menu closes while the back gesture is in progress.
     implementation(libs.androidx.navigationevent.compose)
@@ -35,6 +36,8 @@ dependencies {
     implementation(libs.koin.android)
     implementation(libs.koin.androidxCompose)
 
+    // The same version the shared module uses: the players and downloads go through it too.
+    implementation(libs.okhttp)
     implementation(libs.webrtc.android)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)

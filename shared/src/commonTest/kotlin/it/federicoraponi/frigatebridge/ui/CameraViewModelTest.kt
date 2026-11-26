@@ -38,17 +38,4 @@ class CameraViewModelTest : ViewModelTest() {
 
             assertEquals("answer-for-front_door", peer.answer.await())
         }
-
-    @Test
-    fun offersTheLastMinuteOfRecordingWithTheSessionToken() =
-        runTest {
-            val viewModel = frontDoor()
-
-            viewModel.selectMode(VideoMode.Recording)
-
-            val state = viewModel.state.first { it.recording is RecordingState.Ready }
-            val clip = (state.recording as RecordingState.Ready).clip
-            assertEquals("https://home.example.com/vod/front_door/start/1140/end/1200/master.m3u8", clip.url)
-            assertEquals(setOf("Authorization"), clip.headers.keys)
-        }
 }

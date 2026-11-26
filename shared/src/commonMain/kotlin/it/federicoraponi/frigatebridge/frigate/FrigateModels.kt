@@ -76,7 +76,62 @@ private object EmptyListAsMapSerializer :
 data class RecordingDto(
     @SerialName("start_time") val startTime: Double,
     @SerialName("end_time") val endTime: Double,
+    val duration: Double? = null,
 )
+
+/** A day of the recordings summary, as `yyyy-mm-dd` in the requested time zone. */
+@Serializable
+data class RecordingDayDto(
+    val day: String,
+)
+
+@Serializable
+data class ReviewDto(
+    val id: String,
+    val camera: String,
+    @SerialName("start_time") val startTime: Double,
+    @SerialName("end_time") val endTime: Double? = null,
+    val severity: String = "detection",
+    @SerialName("thumb_path") val thumbPath: String = "",
+    @Serializable(with = FlexibleBooleanSerializer::class)
+    @SerialName("has_been_reviewed") val hasBeenReviewed: Boolean = false,
+    val data: ReviewDataDto = ReviewDataDto(),
+)
+
+@Serializable
+data class ReviewDataDto(
+    val objects: List<String> = emptyList(),
+    val audio: List<String> = emptyList(),
+    val zones: List<String> = emptyList(),
+)
+
+/** Frigate's answer to a request for an export. */
+@Serializable
+data class StartedExportDto(
+    val success: Boolean = true,
+    val message: String = "",
+    @SerialName("export_id") val exportId: String? = null,
+)
+
+@Serializable
+data class ExportDto(
+    val id: String,
+    val name: String = "",
+    @SerialName("video_path") val videoPath: String = "",
+    @SerialName("in_progress") val inProgress: Boolean = false,
+)
+
+/** The database may answer 0 or 1 where a boolean is expected. */
+object FlexibleBooleanSerializer : KSerializer<Boolean> by ZeroOrOneSerializer
+
+private object ZeroOrOneSerializer : JsonTransformingSerializer<Boolean>(Boolean.serializer()) {
+    override fun transformDeserialize(element: JsonElement): JsonElement =
+        when ((element as? JsonPrimitive)?.content) {
+            "1" -> JsonPrimitive(true)
+            "0" -> JsonPrimitive(false)
+            else -> element
+        }
+}
 
 /** A WebRTC offer or answer, as go2rtc exchanges them. */
 @Serializable

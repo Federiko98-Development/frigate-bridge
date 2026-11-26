@@ -41,6 +41,7 @@ kotlin {
             api(libs.koin.core)
             implementation(libs.koin.coreViewmodel)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
             implementation(libs.androidx.datastore.preferences)

@@ -144,7 +144,7 @@ fun CamerasScreen(
         bottomBar = bottomBar,
         topBar = {
             TopAppBar(
-                title = { ServerSwitcher(state, actions) },
+                title = { ServerSwitcher(state.server, state.servers, actions.switchTo, actions.showServers) },
                 actions = {
                     LayoutButton(state.settings.homeLayout, actions.toggleLayout)
                 },
@@ -203,10 +203,12 @@ private fun LayoutButton(
 /** The name of the server on screen; tapping it moves to another one. */
 @Composable
 internal fun ServerSwitcher(
-    state: CamerasState,
-    actions: CamerasActions,
+    server: ServerSummary?,
+    servers: List<ServerSummary>,
+    onSwitch: (String) -> Unit,
+    onShowServers: () -> Unit,
 ) {
-    val server = state.server ?: return
+    if (server == null) return
     var open by rememberSaveable { mutableStateOf(false) }
     val switchLabel = stringResource(R.string.cameras_switch_server)
     Box {
@@ -230,11 +232,11 @@ internal fun ServerSwitcher(
             expanded = open,
             onDismiss = { open = false },
             entries =
-                state.servers.map { other ->
+                servers.map { other ->
                     val current = other.id == server.id
                     MenuEntry(
                         label = other.name,
-                        onClick = { actions.switchTo(other.id) },
+                        onClick = { onSwitch(other.id) },
                         leading = { ServerBadge(other.name, other.colorIndex, size = 32.dp) },
                         trailing =
                             if (current) {
@@ -251,7 +253,7 @@ internal fun ServerSwitcher(
                 } +
                     MenuEntry(
                         label = stringResource(R.string.cameras_all_servers),
-                        onClick = actions.showServers,
+                        onClick = onShowServers,
                         leading = { Icon(Icons.Filled.Home, contentDescription = null) },
                     ),
         )

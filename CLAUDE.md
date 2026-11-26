@@ -109,6 +109,14 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 
 - The camera grid shows `latest.jpg` at low resolution, reloaded only for visible cards on the front screen.
 
+## Recordings and events
+
+- `TimelineViewModel` loads one day of segments and plays it one hour at a time: a whole day does not fit in one
+  VOD playlist. Frigate leaves the pauses out of the video, so `PlaybackWindow` translates positions into times.
+- Review moments (`/api/review`, always with `after`) mark the timeline and fill the events tab. Their pictures
+  and the exports are files served outside `/api` (`/clips/…`, `/exports/…`) that need the same Bearer header.
+- Phase 7 (push notifications) is waiting on a decision: own bridge with Firebase, or Home Assistant.
+
 ## Commands
 
 Gradle needs a JDK; the one bundled with Android Studio works (set `JAVA_HOME` to it).

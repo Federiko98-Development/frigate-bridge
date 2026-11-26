@@ -24,6 +24,7 @@ class FakeFrigate(
     var cookieName: String = "frigate_token",
 ) {
     var recordings = """[{"start_time": 1000.2, "end_time": 1010.2}, {"start_time": 1010.2, "end_time": 1200.7}]"""
+    var reviews = "[]"
     var online = true
     var loginStatus: HttpStatusCode? = null
     var responseDelayMillis = 0L
@@ -63,6 +64,8 @@ class FakeFrigate(
             "profiles" -> respond("""{"profiles":[],"active_profile":null,"last_activated":{}}""")
             "go2rtc/webrtc" -> respond("""{"type":"answer","sdp":"answer-for-${request.url.parameters["src"]}"}""")
             "front_door/recordings" -> respond(recordings)
+            "front_door/recordings/summary" -> respond("""[{"day": "1970-01-01", "hours": []}]""")
+            "review" -> respond(reviews)
             else -> respond("", HttpStatusCode.NotFound)
         }
     }
