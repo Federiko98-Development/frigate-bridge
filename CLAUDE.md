@@ -137,6 +137,10 @@ Gradle needs a JDK; the one bundled with Android Studio works (set `JAVA_HOME` t
 ./gradlew ktlintCheck :androidApp:lintDebug
 ```
 
+`./gradlew :androidApp:assembleRelease` builds the shrunk release, signed only if `keystore.properties` exists
+(see README). R8 problems only show when the app runs: try a release after adding a library that uses native code
+or reflection.
+
 `./gradlew ktlintFormat` fixes formatting. `./gradlew :androidApp:installDebug` installs on a connected phone
 or emulator.
 
