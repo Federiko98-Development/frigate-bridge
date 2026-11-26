@@ -1,5 +1,7 @@
 package it.federicoraponi.frigatebridge.recordings
 
+import kotlin.math.abs
+
 /** A recorded file: [duration] is the length of its video, which may differ a little from `end - start`. */
 data class RecordingSegment(
     val start: Double,
@@ -38,7 +40,7 @@ fun recordedRanges(segments: List<RecordingSegment>): List<TimeRange> {
 private const val END_LEAD_SECONDS = 10L
 
 /**
- * The recorded moment to show when [time] is asked for. In a pause, going [backwards] gives the end of the
+ * The recorded moment to play when a jump leads to [time]. In a pause, going [backwards] gives the end of the
  * recording before it and going forward the start of the one after it, so the choice never jumps the other way.
  * With nothing recorded on that side, the nearest recording on the other; `null` without any recording.
  */
@@ -52,6 +54,16 @@ fun recordedMoment(
     val later = ranges.firstOrNull { it.start > time }?.start
     return if (backwards) earlier ?: later else later ?: earlier
 }
+
+/**
+ * The point of [points] that holds the cursor while the timeline is moved: the nearest one within [reach] of
+ * [position], or `null` if none is that close.
+ */
+fun snapPoint(
+    points: List<Long>,
+    position: Double,
+    reach: Double,
+): Long? = points.minByOrNull { abs(it - position) }?.takeIf { abs(it - position) <= reach }
 
 private const val MILLIS = 1_000.0
 

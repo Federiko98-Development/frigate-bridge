@@ -78,6 +78,8 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   out without it.
 - `NetworkMonitor` follows the default network (one without internet counts): on a new one the server is read
   again, which also picks between its two addresses; offline, screens keep what they show and say so.
+- The app lock (`LockViewModel`, `security/AppLock.kt`) does not cover the app: while locked, `AppNavigation` is not
+  composed, so no video, preview or link runs behind it. It locks on start and after 10 s out of sight.
 - Plain HTTP is allowed on purpose (Frigate on a home network); the server form warns about it.
 - Passwords and tokens are encrypted with an Android Keystore key; backups and device transfer are disabled.
 
@@ -113,7 +115,10 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 
 ## Recordings and events
 
-- A moment chosen in a pause goes to the recording on the side the user was travelling towards.
+- Camera groups are chosen with `CameraGroupBar`: tap selects, holding opens the group's cameras. No extra button.
+  In full screen the timeline sits in a bottom sheet that can be pulled down to its handle.
+- The timeline holds on to the starts of recordings and moments. Left in a pause, the video stops and says so;
+  only jumps (skip buttons, previous and next) pass over pauses, in their direction of travel.
 - `TimelineViewModel` loads one day of segments and plays it one hour at a time: a whole day does not fit in one
   VOD playlist. Frigate leaves the pauses out of the video, so `PlaybackWindow` translates positions into times.
 - Review moments (`/api/review`, always with `after`) mark the timeline and fill the events tab. Their pictures

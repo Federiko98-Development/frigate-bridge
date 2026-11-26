@@ -13,6 +13,7 @@ import it.federicoraponi.frigatebridge.ui.CamerasViewModel
 import it.federicoraponi.frigatebridge.ui.EventArgs
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
+import it.federicoraponi.frigatebridge.ui.LockViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
@@ -37,6 +38,8 @@ class SharedViewModelStore : ViewModelStoreOwner {
     fun camerasViewModel(): CamerasViewModel = resolve { KoinPlatform.getKoin().get() }
 
     fun settingsViewModel(): SettingsViewModel = resolve { KoinPlatform.getKoin().get() }
+
+    fun lockViewModel(): LockViewModel = resolve { KoinPlatform.getKoin().get() }
 
     fun eventsViewModel(): EventsViewModel = resolve { KoinPlatform.getKoin().get() }
 

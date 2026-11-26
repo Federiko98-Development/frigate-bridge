@@ -48,6 +48,27 @@ class CamerasViewModelTest : ViewModelTest() {
         }
 
     @Test
+    fun remembersTheCamerasSwitchedOffInAGroup() =
+        runTest {
+            fixture.saveBoth()
+            fixture.registry.activate("home")
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            viewModel.cameras("home")
+
+            viewModel.showCameras("Outside", setOf("front_door"))
+            val outside = viewModel.state.first { it.selectedGroup == "Outside" && it.names().size == 1 }
+            assertEquals(listOf("front_door"), outside.names())
+
+            // Another screen finds the same choice, and the other groups are untouched.
+            val second = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            second.cameras("home")
+            second.selectGroup("Outside")
+            assertEquals(listOf("front_door"), second.state.first { it.selectedGroup == "Outside" }.names())
+            second.selectGroup(null)
+            assertEquals(listOf("front_door", "garage"), second.state.first { it.selectedGroup == null }.names())
+        }
+
+    @Test
     fun showsTheProblemAndRecoversOnRetry() =
         runTest {
             fixture.saveBoth()

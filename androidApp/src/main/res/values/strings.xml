@@ -150,11 +150,9 @@
     <string name="tab_events">Events</string>
     <string name="events_alerts">Alerts</string>
     <string name="events_detections">Detections</string>
-    <string name="events_all_cameras">All cameras</string>
     <string name="events_all_labels">Everything</string>
     <string name="events_empty">Nothing here</string>
     <string name="events_empty_hint">No moments match these filters.</string>
-    <string name="events_mark_all">Mark all as viewed</string>
     <string name="events_new">Not viewed</string>
     <string name="events_in_progress">In progress</string>
     <string name="events_seconds">%1$d s</string>
@@ -183,4 +181,25 @@
     <string name="event_title">Event</string>
     <string name="day_choose">Choose the date</string>
     <string name="day_confirm">OK</string>
+    <string name="video_gap">Nothing was recorded at this moment</string>
+    <string name="video_gap_earlier">Previous</string>
+    <string name="video_gap_later">Next</string>
+    <string name="cameras_choose">Choose cameras</string>
+    <string name="cameras_select_all">All</string>
+    <string name="cameras_show">Show</string>
+    <string name="events_choose_moment">Choose date and time</string>
+    <string name="events_time_title">From what time</string>
+    <string name="events_from_time">From this time</string>
+    <string name="events_whole_day">Whole day</string>
+    <string name="events_from">from %1$s</string>
+    <string name="events_today_again">Back to today</string>
+    <string name="events_mark_all_short">Mark all seen</string>
+    <string name="lock_title">Frigate Bridge is locked</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_unlock_title">Unlock Frigate Bridge</string>
+    <string name="lock_confirm">Confirm that it is you</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_hint">Asks for your fingerprint, face or screen lock when you open the app or come back to it</string>
+    <string name="settings_app_lock_unavailable">Set up a screen lock on the phone first</string>
 </resources>

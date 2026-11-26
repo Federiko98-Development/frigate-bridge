@@ -6,6 +6,7 @@ import androidx.compose.ui.res.stringResource
 import it.federicoraponi.frigatebridge.R
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -40,3 +41,13 @@ fun dayOf(epochSeconds: Long): String =
         .atZone(ZoneId.systemDefault())
         .toLocalDate()
         .toString()
+
+/** A time of day given as [minuteOfDay] minutes after midnight, as the phone writes it. */
+@Composable
+fun minuteLabel(minuteOfDay: Int): String {
+    val locale = LocalConfiguration.current.locales[0]
+    return DateTimeFormatter
+        .ofLocalizedTime(FormatStyle.SHORT)
+        .withLocale(locale)
+        .format(LocalTime.of(minuteOfDay / 60, minuteOfDay % 60))
+}

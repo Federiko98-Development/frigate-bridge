@@ -149,11 +149,9 @@
     <string name="tab_events">Eventi</string>
     <string name="events_alerts">Allarmi</string>
     <string name="events_detections">Rilevamenti</string>
-    <string name="events_all_cameras">Tutte le camere</string>
     <string name="events_all_labels">Tutto</string>
     <string name="events_empty">Niente da mostrare</string>
     <string name="events_empty_hint">Nessun momento corrisponde a questi filtri.</string>
-    <string name="events_mark_all">Segna tutti come visti</string>
     <string name="events_new">Da vedere</string>
     <string name="events_in_progress">In corso</string>
     <string name="events_seconds">%1$d s</string>
@@ -182,4 +180,25 @@
     <string name="event_title">Evento</string>
     <string name="day_choose">Scegli la data</string>
     <string name="day_confirm">OK</string>
+    <string name="video_gap">Nessuna registrazione in questo momento</string>
+    <string name="video_gap_earlier">Precedente</string>
+    <string name="video_gap_later">Successiva</string>
+    <string name="cameras_choose">Scegli le camere</string>
+    <string name="cameras_select_all">Tutte</string>
+    <string name="cameras_show">Mostra</string>
+    <string name="events_choose_moment">Scegli data e ora</string>
+    <string name="events_time_title">Da che ora</string>
+    <string name="events_from_time">Da quest’ora</string>
+    <string name="events_whole_day">Tutto il giorno</string>
+    <string name="events_from">dalle %1$s</string>
+    <string name="events_today_again">Torna a oggi</string>
+    <string name="events_mark_all_short">Segna come visti</string>
+    <string name="lock_title">Frigate Bridge è bloccata</string>
+    <string name="lock_unlock">Sblocca</string>
+    <string name="lock_unlock_title">Sblocca Frigate Bridge</string>
+    <string name="lock_confirm">Conferma che sei tu</string>
+    <string name="settings_security">Sicurezza</string>
+    <string name="settings_app_lock">Blocco dell’app</string>
+    <string name="settings_app_lock_hint">Chiede impronta, volto o blocco schermo quando apri l’app o ci torni</string>
+    <string name="settings_app_lock_unavailable">Imposta prima un blocco schermo sul telefono</string>
 </resources>

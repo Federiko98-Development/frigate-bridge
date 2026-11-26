@@ -7,13 +7,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
@@ -21,9 +29,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -129,6 +139,7 @@ fun CameraRoute(
             player = player,
             playback = recordings?.playback,
             onRetryRecording = { timeline?.retry() },
+            onSkipRecording = { timeline?.skip(it) },
             onMeasures = { measures = it },
         )
 
@@ -209,6 +220,8 @@ private data class VideoContent(
     val player: Player?,
     val playback: PlaybackState?,
     val onRetryRecording: () -> Unit,
+    /** Jumps back or forward by that many seconds. */
+    val onSkipRecording: (Int) -> Unit,
     val onMeasures: (LiveMeasures) -> Unit,
 )
 
@@ -265,10 +278,38 @@ private fun Video(
                     is PlaybackState.Ready ->
                         content.player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
                     PlaybackState.Empty -> OverVideo(stringResource(R.string.video_no_recording))
+                    is PlaybackState.Gap -> RecordingGap(playback, content.onSkipRecording)
                     is PlaybackState.Failed ->
                         Failure(playback.failure, R.string.video_failed, content.onRetryRecording, state.isOffline)
                     PlaybackState.Loading, null -> ContainedLoadingIndicator()
                 }
+        }
+    }
+}
+
+/** Said where nothing was recorded, with the ways back to a recording. */
+@Composable
+private fun RecordingGap(
+    gap: PlaybackState.Gap,
+    onSkip: (Int) -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        OverVideo(stringResource(R.string.video_gap))
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            // One second is enough to leave the pause on that side.
+            if (gap.hasEarlier) {
+                FilledTonalButton(onClick = { onSkip(-1) }, shapes = ButtonDefaults.shapes()) {
+                    Text(stringResource(R.string.video_gap_earlier))
+                }
+            }
+            if (gap.hasLater) {
+                FilledTonalButton(onClick = { onSkip(1) }, shapes = ButtonDefaults.shapes()) {
+                    Text(stringResource(R.string.video_gap_later))
+                }
+            }
         }
     }
 }
@@ -287,7 +328,8 @@ private fun FullscreenCamera(
 ) {
     val overlay = Color.Black.copy(alpha = 0.45f)
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        video()
+        // The controls come after the drawer, so that they stay on top of it and of the video.
+        if (state.mode == VideoMode.Recording) RecordingsDrawer(recordings, video) else video()
         Box(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(Spacing.lg)) {
             Row(
                 modifier = Modifier.align(Alignment.TopEnd),
@@ -303,9 +345,6 @@ private fun FullscreenCamera(
             }
             if (state.mode == VideoMode.Live && state.streams.size > 1) {
                 StreamChoice(state, viewModel::selectStream, Modifier.align(Alignment.TopStart))
-            }
-            if (state.mode == VideoMode.Recording) {
-                Box(modifier = Modifier.align(Alignment.BottomCenter)) { recordings() }
             }
             val ptz = state.ptz
             if (state.mode == VideoMode.Live && ptz != null) {
@@ -389,7 +428,50 @@ private fun LiveControls(
     }
 }
 
-/** The timeline over the full screen video, on a veil that keeps it readable. */
+/** The video with the timeline in a drawer at the bottom, pulled up to use it and down to see the whole picture. */
+@Composable
+private fun RecordingsDrawer(
+    timeline: @Composable () -> Unit,
+    video: @Composable () -> Unit,
+) {
+    val sheet =
+        rememberBottomSheetState(
+            initialValue = SheetValue.Expanded,
+            enabledValues = setOf(SheetValue.PartiallyExpanded, SheetValue.Expanded),
+        )
+    BottomSheetScaffold(
+        scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheet),
+        sheetPeekHeight = DrawerPeekHeight,
+        sheetDragHandle = { DrawerHandle() },
+        sheetShape = MaterialTheme.shapes.large.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize),
+        // A veil over the picture, with the text colour that goes with the surface under it.
+        sheetContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        sheetContentColor = MaterialTheme.colorScheme.onSurface,
+        containerColor = Color.Black,
+        sheetContent = { timeline() },
+    ) {
+        // The picture keeps the whole screen; the drawer goes over it.
+        Box(modifier = Modifier.fillMaxSize()) { video() }
+    }
+}
+
+// Just the handle stays in sight when the drawer is down: a thin strip, to leave the picture almost whole.
+private val DrawerPeekHeight = 20.dp
+
+/** The mark to pull the drawer with, in a lower strip than Material's own handle takes. */
+@Composable
+private fun DrawerHandle() {
+    Box(modifier = Modifier.fillMaxWidth().height(DrawerPeekHeight), contentAlignment = Alignment.Center) {
+        Box(
+            modifier =
+                Modifier
+                    .size(width = 32.dp, height = 4.dp)
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape),
+        )
+    }
+}
+
+/** What the full screen drawer holds: play and pause beside the timeline. */
 @Composable
 private fun FullscreenTimeline(
     state: TimelineState,
@@ -397,26 +479,21 @@ private fun FullscreenTimeline(
     player: Player?,
 ) {
     val day = state.day ?: return
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg).padding(bottom = Spacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Row(
-            modifier = Modifier.padding(Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-        ) {
-            PlayButton(player)
-            TimelineBar(
-                day = day,
-                ranges = state.ranges,
-                markers = state.markers,
-                time = state.time,
-                zoom = TimelineZoom.Minutes,
-                onSeek = viewModel::seekTo,
-                modifier = Modifier.weight(1f),
-            )
-        }
+        PlayButton(player)
+        TimelineBar(
+            day = day,
+            ranges = state.ranges,
+            markers = state.markers,
+            time = state.time,
+            zoom = TimelineZoom.Minutes,
+            onSeek = viewModel::seekTo,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

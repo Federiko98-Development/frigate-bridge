@@ -28,6 +28,16 @@ class TimelineTest {
     }
 
     @Test
+    fun holdsTheNearestPointOnlyWhenItIsClose() {
+        val points = listOf(100L, 720L)
+
+        assertEquals(100, snapPoint(points, 108.0, reach = 10.0))
+        assertEquals(720, snapPoint(points, 712.5, reach = 10.0))
+        assertNull(snapPoint(points, 400.0, reach = 10.0))
+        assertNull(snapPoint(emptyList(), 400.0, reach = 10.0))
+    }
+
+    @Test
     fun joinsConsecutiveFilesIntoRanges() {
         assertEquals(listOf(TimeRange(100, 120), TimeRange(720, 730)), recordedRanges(segments))
     }

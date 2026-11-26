@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.security.canAuthenticateUser
 import it.federicoraponi.frigatebridge.settings.AppSettings
 import it.federicoraponi.frigatebridge.settings.HomeLayout
 import it.federicoraponi.frigatebridge.settings.PreviewRefresh
@@ -54,12 +55,14 @@ data class SettingsActions(
     val setPreviewRefresh: (PreviewRefresh) -> Unit = {},
     val setSavePreviewData: (Boolean) -> Unit = {},
     val manageServers: () -> Unit = {},
+    val setAppLock: (Boolean) -> Unit = {},
 )
 
 /** The app's settings. [onBack] is set when the screen was opened on top of another one, not as a tab. */
 @Composable
 fun SettingsRoute(
     onManageServers: () -> Unit,
+    onAppLockChange: (Boolean) -> Unit,
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     viewModel: SettingsViewModel = koinViewModel(),
@@ -75,7 +78,10 @@ fun SettingsRoute(
                 setPreviewRefresh = viewModel::setPreviewRefresh,
                 setSavePreviewData = viewModel::setSavePreviewData,
                 manageServers = onManageServers,
+                setAppLock = onAppLockChange,
             ),
+        // Looked up again every time the screen is drawn: the phone's screen lock may have just been set up.
+        canLock = LocalContext.current.canAuthenticateUser(),
         onBack = onBack,
         bottomBar = bottomBar,
     )
@@ -86,6 +92,7 @@ fun SettingsScreen(
     settings: AppSettings,
     actions: SettingsActions,
     modifier: Modifier = Modifier,
+    canLock: Boolean = true,
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
 ) {
@@ -120,6 +127,7 @@ fun SettingsScreen(
             Appearance(settings, actions)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Language()
             Cameras(settings, actions)
+            Security(settings.appLock, canLock, actions.setAppLock)
             Servers(actions.manageServers)
             About()
         }
@@ -179,6 +187,28 @@ private fun Language() {
                 ),
             selected = current,
             onSelect = { manager.applicationLocales = LocaleList.forLanguageTags(it) },
+            index = 0,
+            count = 1,
+        )
+    }
+}
+
+@Composable
+private fun Security(
+    isLocked: Boolean,
+    canLock: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    ListGroup(title = stringResource(R.string.settings_security)) {
+        SwitchItem(
+            title = stringResource(R.string.settings_app_lock),
+            description =
+                stringResource(
+                    if (canLock) R.string.settings_app_lock_hint else R.string.settings_app_lock_unavailable,
+                ),
+            // Without a screen lock the app cannot be locked, whatever was saved.
+            checked = isLocked && canLock,
+            onCheckedChange = { if (canLock) onChange(it) },
             index = 0,
             count = 1,
         )

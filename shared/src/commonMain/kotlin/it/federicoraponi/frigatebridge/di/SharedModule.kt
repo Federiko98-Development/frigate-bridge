@@ -10,6 +10,7 @@ import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
+import it.federicoraponi.frigatebridge.ui.LockViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
 import it.federicoraponi.frigatebridge.ui.SettingsViewModel
@@ -32,6 +33,7 @@ val sharedModule =
         viewModelOf(::ServerListViewModel)
         viewModelOf(::CamerasViewModel)
         viewModelOf(::SettingsViewModel)
+        viewModelOf(::LockViewModel)
         viewModelOf(::EventsViewModel)
         viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
         viewModel { parameters -> CameraViewModel(parameters.get(), get(), get()) }

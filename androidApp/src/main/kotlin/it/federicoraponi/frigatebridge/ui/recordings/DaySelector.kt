@@ -58,9 +58,12 @@ fun DaySelector(
         Text(dayLabel(selected), modifier = Modifier.padding(start = Spacing.sm))
     }
     if (picking) {
+        val days = available.toSet()
+        val years = (available + selected).map { LocalDate.parse(it).year }
         DayPickerDialog(
             selected = selected,
-            available = available,
+            years = years.min()..years.max(),
+            isSelectable = { it in days },
             onDismiss = { picking = false },
             onSelect = {
                 picking = false
@@ -70,22 +73,22 @@ fun DaySelector(
     }
 }
 
+/** A calendar to choose a day among those [isSelectable] accepts, written as `yyyy-mm-dd`. */
 @Composable
-private fun DayPickerDialog(
+fun DayPickerDialog(
     selected: String,
-    available: List<String>,
+    years: IntRange,
+    isSelectable: (String) -> Boolean,
     onDismiss: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
-    val days = available.toSet()
-    val years = available.map { LocalDate.parse(it).year } + LocalDate.parse(selected).year
     val state =
         rememberDatePickerState(
             initialSelectedDateMillis = pickerMillis(selected),
-            yearRange = years.min()..years.max(),
+            yearRange = years,
             selectableDates =
                 object : SelectableDates {
-                    override fun isSelectableDate(utcTimeMillis: Long) = pickerDate(utcTimeMillis) in days
+                    override fun isSelectableDate(utcTimeMillis: Long) = isSelectable(pickerDate(utcTimeMillis))
 
                     override fun isSelectableYear(year: Int) = year in years
                 },

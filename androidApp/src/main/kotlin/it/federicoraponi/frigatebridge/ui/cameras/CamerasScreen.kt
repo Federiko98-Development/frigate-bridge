@@ -1,20 +1,15 @@
 package it.federicoraponi.frigatebridge.ui.cameras
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -22,7 +17,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -81,6 +74,7 @@ data class CamerasActions(
     val showServers: () -> Unit = {},
     val switchTo: (String) -> Unit = {},
     val selectGroup: (String?) -> Unit = {},
+    val showCameras: (String?, Set<String>) -> Unit = { _, _ -> },
     val retry: () -> Unit = {},
     val editServer: (String) -> Unit = {},
     val allowLocalNetwork: () -> Unit = {},
@@ -118,6 +112,7 @@ fun CamerasRoute(
                 showServers = onShowServers,
                 switchTo = viewModel::switchTo,
                 selectGroup = viewModel::selectGroup,
+                showCameras = viewModel::showCameras,
                 retry = viewModel::retry,
                 editServer = onEditServer,
                 allowLocalNetwork = allowLocalNetwork,
@@ -155,7 +150,16 @@ fun CamerasScreen(
         },
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (state.groups.isNotEmpty()) GroupSelector(state, actions.selectGroup)
+            // Also without groups: holding "all cameras" is how single cameras are switched off.
+            if (state.choices.isNotEmpty()) {
+                CameraGroupBar(
+                    choices = state.choices,
+                    selected = state.selectedGroup,
+                    onSelect = actions.selectGroup,
+                    onShow = actions.showCameras,
+                    modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                )
+            }
             if (localNetworkBlocked) {
                 LocalNetworkNotice(actions.allowLocalNetwork, Modifier.padding(Spacing.lg))
             }
@@ -264,40 +268,6 @@ internal fun ServerSwitcher(
                         leading = { Icon(Icons.Filled.Home, contentDescription = null) },
                     ),
         )
-    }
-}
-
-/** "All cameras" and the server's groups as a connected button group. */
-@Composable
-private fun GroupSelector(
-    state: CamerasState,
-    onSelect: (String?) -> Unit,
-) {
-    val options: List<String?> = listOf(null) + state.groups
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
-                .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
-    ) {
-        options.forEachIndexed { index, group ->
-            ToggleButton(
-                checked = state.selectedGroup == group,
-                onCheckedChange = { onSelect(group) },
-                shapes =
-                    when (index) {
-                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                        options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                    },
-                modifier = Modifier.semantics { role = Role.RadioButton },
-            ) {
-                Text(group?.replace('_', ' ') ?: stringResource(R.string.cameras_all))
-            }
-        }
     }
 }
 

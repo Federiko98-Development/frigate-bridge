@@ -28,6 +28,7 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.navigation.compose)
     // 1.1.x crashes when a menu closes while the back gesture is in progress.

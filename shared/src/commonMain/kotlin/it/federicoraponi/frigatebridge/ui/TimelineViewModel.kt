@@ -50,6 +50,12 @@ sealed interface PlaybackState {
     /** Nothing was recorded around the chosen moment. */
     data object Empty : PlaybackState
 
+    /** The cursor is where nothing was recorded, on a day that has recordings elsewhere. */
+    data class Gap(
+        val hasEarlier: Boolean,
+        val hasLater: Boolean,
+    ) : PlaybackState
+
     data class Failed(
         val failure: VideoFailure,
     ) : PlaybackState
@@ -101,6 +107,8 @@ class TimelineViewModel(
         when {
             current.day == null -> load()
             segments.isEmpty() -> openDay(current.day, current.time)
+            // There is nothing to ask for again where nothing was recorded.
+            current.playback is PlaybackState.Gap -> Unit
             else -> playFrom(current.time, forceReload = true)
         }
     }
@@ -110,14 +118,24 @@ class TimelineViewModel(
         if (day != mutableState.value.day) openDay(day, startTime = null)
     }
 
-    /** Moves to [time], loading another stretch of video if needed. */
+    /** Puts the cursor on [time]: the video follows it, and stops where nothing was recorded. */
     fun seekTo(time: Long) {
         val day = mutableState.value.day ?: return
         val wanted = time.coerceIn(day.start, day.end - 1)
-        playFrom(wanted, backwards = wanted < mutableState.value.time)
+        val ranges = mutableState.value.ranges
+        if (ranges.isNotEmpty() && ranges.none { wanted >= it.start && wanted < it.end }) {
+            stopAt(wanted, ranges)
+        } else {
+            playFrom(wanted)
+        }
     }
 
-    fun skip(seconds: Int) = seekTo(mutableState.value.time + seconds)
+    /** Jumps [seconds] of video, passing over the pauses between recordings. */
+    fun skip(seconds: Int) {
+        val day = mutableState.value.day ?: return
+        val wanted = (mutableState.value.time + seconds).coerceIn(day.start, day.end - 1)
+        playFrom(wanted, backwards = seconds < 0)
+    }
 
     /** The player moved on. */
     fun playerAt(positionMillis: Long) {
@@ -257,6 +275,15 @@ class TimelineViewModel(
                     fail(error)
                 }
             }
+    }
+
+    private fun stopAt(
+        time: Long,
+        ranges: List<TimeRange>,
+    ) {
+        clipJob?.cancel()
+        val gap = PlaybackState.Gap(ranges.any { it.end <= time }, ranges.any { it.start > time })
+        mutableState.update { it.copy(time = time, playback = gap) }
     }
 
     private fun fail(error: FrigateError) {

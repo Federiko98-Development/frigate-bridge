@@ -108,13 +108,17 @@ private val AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs: Boole
     get() = initialState.isTab && targetState.isTab
 
 @Composable
-fun AppNavigation(viewModel: StartViewModel = koinViewModel()) {
+fun AppNavigation(
+    viewModel: StartViewModel = koinViewModel(),
+    /** The user wants the app lock turned on or off: it takes effect once they prove who they are. */
+    onAppLockChange: (Boolean) -> Unit = {},
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val destination = state.destination
     if (destination == null) {
         LoadingContent()
     } else {
-        AppNavHost(destination, state.target, onLinkHandled = viewModel::linkHandled)
+        AppNavHost(destination, state.target, viewModel::linkHandled, onAppLockChange)
     }
     if (state.isLinkRejected) {
         AlertDialog(
@@ -135,6 +139,7 @@ private fun AppNavHost(
     destination: StartDestination,
     target: EventTarget?,
     onLinkHandled: () -> Unit,
+    onAppLockChange: (Boolean) -> Unit,
 ) {
     val navController = rememberNavController()
     val start: Any = remember { if (destination == StartDestination.Cameras) Cameras else Servers }
@@ -188,12 +193,14 @@ private fun AppNavHost(
         composable<SettingsTab> {
             SettingsRoute(
                 onManageServers = { navController.showServers() },
+                onAppLockChange = onAppLockChange,
                 bottomBar = { tabBar(MainTab.Settings) },
             )
         }
         composable<SettingsPage> {
             SettingsRoute(
                 onManageServers = { navController.popBackStack<SettingsPage>(inclusive = true) },
+                onAppLockChange = onAppLockChange,
                 onBack = { navController.popBackStack<SettingsPage>(inclusive = true) },
             )
         }

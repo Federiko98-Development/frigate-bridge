@@ -27,8 +27,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -44,6 +47,7 @@ import it.federicoraponi.frigatebridge.recordings.RecordingDay
 import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.recordings.TimeRange
+import it.federicoraponi.frigatebridge.recordings.snapPoint
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -69,13 +73,17 @@ private const val SETTLE_MILLIS = 700L
 // How long the chosen moment stays under the pointer while the video catches up.
 private const val FOLLOW_MILLIS = 1_500L
 
+// How close the cursor must be, on screen, to the start of a clip to hold on to it.
+private val SNAP_REACH = 12.dp
+
 // A moment shorter than this would be too thin to see.
 private val MIN_MARK_WIDTH = 3.dp
 
 /**
  * The day as a strip that slides under a fixed pointer: recorded stretches, with the review moments on top.
  * It can be dragged and flung, as many times as needed to travel far; the video moves to the moment under the
- * pointer once the strip is left alone. A tap brings a point under the pointer.
+ * pointer once the strip is left alone. A tap brings a point under the pointer. Near the start of a recording or
+ * of a moment the pointer holds on to it, with a tick of the phone's vibration.
  */
 @Composable
 fun TimelineBar(
@@ -90,7 +98,15 @@ fun TimelineBar(
     // The moment under the pointer while the user is looking for one; the video's time is ignored meanwhile.
     var browsed by remember(day) { mutableStateOf<Double?>(null) }
     var width by remember { mutableIntStateOf(1) }
-    val shown = browsed?.toLong() ?: time
+    val points = remember(ranges, markers) { (ranges.map { it.start } + markers.map { it.start }).distinct() }
+    val reachPixels = with(LocalDensity.current) { SNAP_REACH.toPx() }
+    val held = browsed?.let { snapPoint(points, it, reachPixels * zoom.spanSeconds.toDouble() / width) }
+    val shown = held ?: browsed?.toLong() ?: time
+    val latestHeld by rememberUpdatedState(held)
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(held) {
+        if (held != null) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+    }
     val latestTime by rememberUpdatedState(time)
     val seek by rememberUpdatedState(onSeek)
 
@@ -110,7 +126,7 @@ fun TimelineBar(
             if (isMoving || chosen == null) return@collectLatest
             delay(SETTLE_MILLIS)
             val before = latestTime
-            seek(chosen.toLong())
+            seek(latestHeld ?: chosen.toLong())
             withTimeoutOrNull(FOLLOW_MILLIS) { snapshotFlow { latestTime }.first { it != before } }
             browsed = null
         }
@@ -127,7 +143,7 @@ fun TimelineBar(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        Text(shownText, style = MaterialTheme.typography.titleMediumEmphasized)
+        Text(shownText, style = MaterialTheme.typography.titleMediumEmphasized, color = colors.onSurface)
         Surface(shape = MaterialTheme.shapes.large, color = colors.surfaceContainer) {
             Canvas(
                 modifier =

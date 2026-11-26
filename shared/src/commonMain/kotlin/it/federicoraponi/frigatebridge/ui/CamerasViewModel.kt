@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.federicoraponi.frigatebridge.camera.Camera
 import it.federicoraponi.frigatebridge.camera.CameraRef
+import it.federicoraponi.frigatebridge.camera.GroupChoice
+import it.federicoraponi.frigatebridge.camera.groupChoices
+import it.federicoraponi.frigatebridge.camera.showing
 import it.federicoraponi.frigatebridge.frigate.FrigateError
 import it.federicoraponi.frigatebridge.network.NetworkMonitor
 import it.federicoraponi.frigatebridge.network.connections
@@ -60,6 +63,8 @@ data class CamerasState(
     val groups: List<String> = emptyList(),
     /** `null` means "all cameras". */
     val selectedGroup: String? = null,
+    /** "All cameras" and every group, each with the cameras switched on and off in it. */
+    val choices: List<GroupChoice> = emptyList(),
     val content: CamerasContent = CamerasContent.Loading,
     val settings: AppSettings = AppSettings(),
     /** The user asked to read the server again and it has not answered yet. */
@@ -129,6 +134,17 @@ class CamerasViewModel(
         viewModelScope.launch { registry.activate(serverId) }
     }
 
+    /** Switches on, in a group, only the cameras named in [shown], and shows that group. */
+    fun showCameras(
+        group: String?,
+        shown: Set<String>,
+    ) {
+        val serverId = registry.state.value?.activeServerId ?: return
+        val choice = state.value.choices.firstOrNull { it.name == group } ?: return
+        selectGroup(group)
+        viewModelScope.launch { settingsStore.update { it.showing(serverId, choice, shown) } }
+    }
+
     fun toggleLayout() {
         viewModelScope.launch {
             settingsStore.update {
@@ -176,7 +192,8 @@ class CamerasViewModel(
         if (server == null || session == null) {
             return flowOf(CamerasState(servers = servers, content = CamerasContent.NoServer))
         }
-        return combine(session.state, selectedGroup) { connection, selection ->
+        val hiddenCameras = settingsStore.settings.map { it.hiddenCameras }.distinctUntilChanged()
+        return combine(session.state, selectedGroup, hiddenCameras) { connection, selection, hidden ->
             val summary = server.summary()
             when (connection) {
                 ConnectionState.Idle, ConnectionState.Connecting ->
@@ -192,14 +209,17 @@ class CamerasViewModel(
                     val groups = snapshot.catalog.groups.map { it.name }
                     // A selection made on another server, or on a group that no longer exists, does not apply.
                     val group = selection?.takeIf { it.serverId == server.id && it.name in groups }?.name
+                    val catalog = snapshot.catalog
+                    val choices = catalog.groupChoices(server.id, catalog.camerasIn(null), hidden)
                     CamerasState(
                         server = summary,
                         servers = servers,
                         groups = groups,
                         selectedGroup = group,
+                        choices = choices,
                         content =
                             CamerasContent.Ready(
-                                cameras = snapshot.catalog.camerasIn(group),
+                                cameras = choices.first { it.name == group }.shown,
                                 outdatedVersion = snapshot.version.takeUnless { snapshot.isSupportedVersion },
                             ),
                     )

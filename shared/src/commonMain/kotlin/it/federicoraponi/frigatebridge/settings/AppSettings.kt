@@ -38,6 +38,10 @@ data class AppSettings(
     val previewRefresh: PreviewRefresh = PreviewRefresh.Fast,
     /** On a metered connection, load pictures less often. */
     val savePreviewData: Boolean = true,
+    /** The app asks who is using it, with a fingerprint, the face or the phone's own code. */
+    val appLock: Boolean = false,
+    /** Names of the cameras switched off in each group, kept by `camera/CameraSelection.kt`. */
+    val hiddenCameras: Map<String, Set<String>> = emptyMap(),
 ) {
     /** The pause between two pictures of a camera, or `null` to load them only once. */
     fun previewIntervalMillis(onMeteredNetwork: Boolean): Long? {

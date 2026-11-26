@@ -215,7 +215,8 @@ private fun EventVideo(
             is PlaybackState.Ready -> player?.let { RecordingPicture(it, Modifier.fillMaxSize()) }
             is PlaybackState.Failed ->
                 Failure(playback.failure, R.string.video_failed, onRetry, state.isOffline)
-            PlaybackState.Loading, PlaybackState.Empty -> ContainedLoadingIndicator()
+            // A moment's video is always asked for whole: it has no cursor to leave in a pause.
+            PlaybackState.Loading, PlaybackState.Empty, is PlaybackState.Gap -> ContainedLoadingIndicator()
         }
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,11 +16,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -29,11 +34,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -41,7 +50,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,6 +59,7 @@ import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.ui.EventsState
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
+import it.federicoraponi.frigatebridge.ui.cameras.CameraGroupBar
 import it.federicoraponi.frigatebridge.ui.cameras.ServerSwitcher
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
@@ -61,7 +70,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
 import it.federicoraponi.frigatebridge.ui.recordings.dayLabel
-import it.federicoraponi.frigatebridge.ui.recordings.dayOf
+import it.federicoraponi.frigatebridge.ui.recordings.minuteLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
@@ -98,16 +107,27 @@ private fun EventsScreen(
     onOpen: (ReviewItem) -> Unit,
     bottomBar: @Composable () -> Unit,
 ) {
+    var picking by rememberSaveable { mutableStateOf(false) }
+    if (picking) {
+        MomentPicker(
+            date = state.date,
+            today = state.today,
+            fromMinute = state.filter.fromMinute,
+            onDismiss = { picking = false },
+            onPick = { date, fromMinute ->
+                picking = false
+                viewModel.setMoment(date, fromMinute)
+            },
+        )
+    }
     Scaffold(
         bottomBar = bottomBar,
         topBar = {
             TopAppBar(
                 title = { ServerSwitcher(state.server, state.servers, viewModel::switchTo, onShowServers) },
                 actions = {
-                    if (state.items.any { !it.isViewed }) {
-                        IconButton(onClick = viewModel::markAllViewed, shapes = IconButtonDefaults.shapes()) {
-                            Icon(Icons.Filled.Done, contentDescription = stringResource(R.string.events_mark_all))
-                        }
+                    IconButton(onClick = { picking = true }, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Filled.DateRange, contentDescription = stringResource(R.string.events_choose_moment))
                     }
                 },
             )
@@ -118,7 +138,7 @@ private fun EventsScreen(
             onRefresh = viewModel::refresh,
             modifier = Modifier.padding(innerPadding),
         ) {
-            EventList(state, viewModel, onOpen)
+            EventList(state, viewModel, onOpen, onChooseMoment = { picking = true })
         }
     }
 }
@@ -128,6 +148,7 @@ private fun EventList(
     state: EventsState,
     viewModel: EventsViewModel,
     onOpen: (ReviewItem) -> Unit,
+    onChooseMoment: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -135,6 +156,7 @@ private fun EventList(
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
         item(key = "filters") { Filters(state, viewModel) }
+        item(key = "moment") { ShownMoment(state, viewModel, onChooseMoment) }
         if (state.isOffline) item(key = "offline") { OfflineNotice() }
         state.problem?.takeUnless { state.isOffline }?.let { problem ->
             item(key = "problem") {
@@ -157,27 +179,11 @@ private fun EventList(
                 )
             }
         }
-        val days = state.items.groupBy { dayOf(it.start) }
-        days.forEach { (day, moments) ->
-            item(key = "day-$day") {
-                Text(
-                    dayLabel(day),
-                    style = MaterialTheme.typography.titleSmallEmphasized,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier =
-                        Modifier
-                            .padding(start = Spacing.lg, top = Spacing.md, bottom = Spacing.xs)
-                            .semantics { heading() },
-                )
-            }
-            moments.forEachIndexed { index, moment ->
-                item(key = moment.id) {
-                    val name =
-                        state.cameras.firstOrNull { it.ref == moment.camera }?.displayName
-                            ?: moment.camera.cameraName
-                    EventRow(moment, name, index, moments.size, viewModel, onClick = { onOpen(moment) })
-                }
-            }
+        itemsIndexed(state.items, key = { _, moment -> moment.id }) { index, moment ->
+            val name =
+                state.cameras.firstOrNull { it.ref == moment.camera }?.displayName
+                    ?: moment.camera.cameraName
+            EventRow(moment, name, index, state.items.size, viewModel, onClick = { onOpen(moment) })
         }
         if (state.hasMore) {
             item(key = "more") {
@@ -207,12 +213,12 @@ private fun Filters(
             selected = state.filter.severity.ordinal,
             onSelect = { viewModel.setSeverity(ReviewSeverity.entries[it]) },
         )
-        if (state.cameras.size > 1) {
-            val names = listOf(stringResource(R.string.events_all_cameras)) + state.cameras.map { it.displayName }
-            ConnectedChoice(
-                labels = names,
-                selected = state.cameras.indexOfFirst { it.ref.cameraName == state.filter.camera } + 1,
-                onSelect = { viewModel.setCamera(if (it == 0) null else state.cameras[it - 1].ref.cameraName) },
+        if (state.choices.isNotEmpty()) {
+            CameraGroupBar(
+                choices = state.choices,
+                selected = state.filter.group,
+                onSelect = viewModel::setGroup,
+                onShow = viewModel::showCameras,
             )
         }
         // The chosen label stays on offer even if the list it filtered no longer mentions others.
@@ -224,6 +230,37 @@ private fun Filters(
                 selected = labels.indexOf(state.filter.label) + 1,
                 onSelect = { viewModel.setLabel(if (it == 0) null else labels[it - 1]) },
             )
+        }
+    }
+}
+
+/** The day on screen, with the time it starts from, and what can be done with it. */
+@Composable
+private fun ShownMoment(
+    state: EventsState,
+    viewModel: EventsViewModel,
+    onChoose: () -> Unit,
+) {
+    if (state.date.isEmpty()) return
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = Spacing.xs, bottom = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val day = dayLabel(state.date)
+        val from = state.filter.fromMinute?.let { stringResource(R.string.events_from, minuteLabel(it)) }
+        FilledTonalButton(onClick = onChoose, shapes = ButtonDefaults.shapes()) {
+            Text(listOfNotNull(day, from).joinToString(" · "))
+        }
+        if (state.filter.date != null || state.filter.fromMinute != null) {
+            IconButton(onClick = viewModel::showToday, shapes = IconButtonDefaults.shapes()) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.events_today_again))
+            }
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        if (state.items.any { !it.isViewed }) {
+            TextButton(onClick = viewModel::markAllViewed, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(R.string.events_mark_all_short))
+            }
         }
     }
 }

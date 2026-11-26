@@ -14,9 +14,11 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 - Self-signed certificates, accepted once per server after checking the fingerprint
 - Cameras and camera groups of the selected server
 - Camera previews in the grid, live view (over HTTPS, or WebRTC), and playback of the last recorded minute
-- Recordings on a timeline with a date picker, alerts and detections with filters, export and sharing of clips
+- Recordings on a timeline with a date picker, alerts and detections filtered by date, time, camera and object, export and sharing of clips
 - A page for each alert or detection with its video, reachable from a link of another app
 - Keeps what it shows without a network, and reconnects when the phone changes network
+- An optional app lock with fingerprint, face or screen lock
+- Camera groups, where each camera can be switched on or off
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion
 
 ## Links to an event
