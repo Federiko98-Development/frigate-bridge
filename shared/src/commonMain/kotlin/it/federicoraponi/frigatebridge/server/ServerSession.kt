@@ -233,12 +233,6 @@ class ServerSession(
         )
     }
 
-    suspend fun recordedFrame(
-        camera: String,
-        time: Long,
-        height: Int,
-    ): ByteArray = connectedApi().recordedFrame(camera, time, height)
-
     /** Review moments between two times, newest first. */
     suspend fun reviews(
         after: Long,

@@ -11,6 +11,7 @@ import it.federicoraponi.frigatebridge.recordings.RecordingDay
 import it.federicoraponi.frigatebridge.recordings.RecordingSegment
 import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.recordings.TimeRange
+import it.federicoraponi.frigatebridge.recordings.recordedMoment
 import it.federicoraponi.frigatebridge.recordings.recordedRanges
 import it.federicoraponi.frigatebridge.server.RecordingClip
 import it.federicoraponi.frigatebridge.server.ServerRegistry
@@ -112,7 +113,8 @@ class TimelineViewModel(
     /** Moves to [time], loading another stretch of video if needed. */
     fun seekTo(time: Long) {
         val day = mutableState.value.day ?: return
-        playFrom(time.coerceIn(day.start, day.end - 1))
+        val wanted = time.coerceIn(day.start, day.end - 1)
+        playFrom(wanted, backwards = wanted < mutableState.value.time)
     }
 
     fun skip(seconds: Int) = seekTo(mutableState.value.time + seconds)
@@ -134,14 +136,6 @@ class TimelineViewModel(
     fun playerFailed(detail: String?) {
         mutableState.update { it.copy(playback = PlaybackState.Failed(VideoFailure(detail = detail))) }
     }
-
-    /** A small picture of the moment [time], to show while looking for a point on the timeline. */
-    suspend fun preview(time: Long): ByteArray? =
-        try {
-            registry.session(camera.serverId)?.recordedFrame(camera.cameraName, time, PREVIEW_FRAME_HEIGHT)
-        } catch (_: FrigateError) {
-            null
-        }
 
     /** Asks the server for a file with the [seconds] that follow [start]. */
     fun export(
@@ -235,10 +229,10 @@ class TimelineViewModel(
     private fun playFrom(
         time: Long,
         forceReload: Boolean = false,
+        backwards: Boolean = false,
     ) {
-        // A moment without video gives way to the next recorded one, or to the end of the last.
-        val covering = segments.firstOrNull { it.end > time } ?: segments.lastOrNull() ?: return
-        val target = maxOf(time, covering.start.toLong()).coerceAtMost(covering.end.toLong() - 1)
+        // A moment without video gives way to a recorded one.
+        val target = recordedMoment(mutableState.value.ranges, time, backwards) ?: return
         val current = window
         val playback = mutableState.value.playback
         if (!forceReload && current != null && current.covers(target) && playback is PlaybackState.Ready) {
@@ -278,4 +272,3 @@ class TimelineViewModel(
 
 private const val WINDOW_SECONDS = 3_600L
 private const val LATEST_LEAD_SECONDS = 60L
-private const val PREVIEW_FRAME_HEIGHT = 180

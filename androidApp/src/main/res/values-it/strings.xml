@@ -67,7 +67,7 @@
     <string name="video_recording">Registrazione</string>
     <string name="video_failed">Video non disponibile</string>
     <string name="control_failed">Comando non riuscito</string>
-    <string name="video_no_recording">Nessuna registrazione nelle ultime 24 ore</string>
+    <string name="video_no_recording">Nessuna registrazione in questo giorno</string>
     <string name="video_first_frame">Primo fotogramma dopo %1$d ms</string>
     <string name="video_round_trip">Ritardo di rete %1$d ms</string>
     <string name="video_mute">Disattiva audio</string>
@@ -80,12 +80,10 @@
     <string name="video_via_https">Diretta via HTTPS</string>
     <string name="video_no_audio">Nessun audio compatibile da questa camera</string>
     <string name="tab_cameras">Camere</string>
-    <string name="tab_recordings">Registrazioni</string>
     <string name="cameras_show_list">Mostra una camera per riga</string>
     <string name="cameras_show_grid">Mostra a griglia</string>
     <string name="camera_recording">Registrazione attiva</string>
     <string name="camera_detecting">Rilevamento attivo</string>
-    <string name="recordings_off">Registrazione disattivata</string>
     <string name="settings_title">Impostazioni</string>
     <string name="settings_appearance">Aspetto</string>
     <string name="settings_theme">Tema</string>
@@ -169,7 +167,6 @@
     <string name="label_bus">Autobus</string>
     <string name="label_bird">Uccello</string>
     <string name="label_package">Pacco</string>
-    <string name="recordings_open">Apri la timeline</string>
     <string name="event_open_timeline">Apri nella timeline</string>
     <string name="event_what">Rilevato</string>
     <string name="event_kind">Tipo</string>
@@ -183,4 +180,6 @@
     <string name="link_rejected_title">Impossibile aprire il link</string>
     <string name="link_rejected_message">Non indica un server salvato in questa app.</string>
     <string name="event_title">Evento</string>
+    <string name="day_choose">Scegli la data</string>
+    <string name="day_confirm">OK</string>
 </resources>

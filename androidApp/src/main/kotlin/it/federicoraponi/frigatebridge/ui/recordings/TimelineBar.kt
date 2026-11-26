@@ -1,39 +1,34 @@
 package it.federicoraponi.frigatebridge.ui.recordings
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -50,9 +45,10 @@ import it.federicoraponi.frigatebridge.recordings.ReviewItem
 import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.recordings.TimeRange
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -67,14 +63,19 @@ enum class TimelineZoom(
     Hours(21_600, 3_600),
 }
 
-private const val PREVIEW_PAUSE_MILLIS = 250L
+// How long the strip must be left alone before the video moves, so that several swipes make one journey.
+private const val SETTLE_MILLIS = 700L
+
+// How long the chosen moment stays under the pointer while the video catches up.
+private const val FOLLOW_MILLIS = 1_500L
 
 // A moment shorter than this would be too thin to see.
 private val MIN_MARK_WIDTH = 3.dp
 
 /**
  * The day as a strip that slides under a fixed pointer: recorded stretches, with the review moments on top.
- * Dragging shows the time and a picture of it; the video moves there on release. A tap goes straight to a point.
+ * It can be dragged and flung, as many times as needed to travel far; the video moves to the moment under the
+ * pointer once the strip is left alone. A tap brings a point under the pointer.
  */
 @Composable
 fun TimelineBar(
@@ -84,13 +85,36 @@ fun TimelineBar(
     time: Long,
     zoom: TimelineZoom,
     onSeek: (Long) -> Unit,
-    preview: suspend (Long) -> ByteArray?,
     modifier: Modifier = Modifier,
 ) {
-    var scrubbed by remember(day) { mutableStateOf<Long?>(null) }
-    val shown = scrubbed ?: time
+    // The moment under the pointer while the user is looking for one; the video's time is ignored meanwhile.
+    var browsed by remember(day) { mutableStateOf<Double?>(null) }
+    var width by remember { mutableIntStateOf(1) }
+    val shown = browsed?.toLong() ?: time
     val latestTime by rememberUpdatedState(time)
     val seek by rememberUpdatedState(onSeek)
+
+    fun browseTo(moment: Double): Double =
+        moment.coerceIn(day.start.toDouble(), (day.end - 1).toDouble()).also { browsed = it }
+
+    val scroll =
+        rememberScrollableState { pixels ->
+            val secondsPerPixel = zoom.spanSeconds.toDouble() / width
+            val from = browsed ?: latestTime.toDouble()
+            // Dragging right brings earlier moments under the pointer. What is left at midnight is not used.
+            val to = browseTo(from - pixels * secondsPerPixel)
+            ((from - to) / secondsPerPixel).toFloat()
+        }
+    LaunchedEffect(day, scroll) {
+        snapshotFlow { scroll.isScrollInProgress to browsed }.collectLatest { (isMoving, chosen) ->
+            if (isMoving || chosen == null) return@collectLatest
+            delay(SETTLE_MILLIS)
+            val before = latestTime
+            seek(chosen.toLong())
+            withTimeoutOrNull(FOLLOW_MILLIS) { snapshotFlow { latestTime }.first { it != before } }
+            browsed = null
+        }
+    }
     val measurer = rememberTextMeasurer()
     val colors = MaterialTheme.colorScheme
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurfaceVariant)
@@ -103,7 +127,6 @@ fun TimelineBar(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        scrubbed?.let { ScrubPreview(it, preview) }
         Text(shownText, style = MaterialTheme.typography.titleMediumEmphasized)
         Surface(shape = MaterialTheme.shapes.large, color = colors.surfaceContainer) {
             Canvas(
@@ -111,6 +134,7 @@ fun TimelineBar(
                     Modifier
                         .fillMaxWidth()
                         .height(64.dp)
+                        .onSizeChanged { width = maxOf(it.width, 1) }
                         .semantics {
                             contentDescription = description
                             stateDescription = shownText
@@ -123,32 +147,12 @@ fun TimelineBar(
                                 seek(day.start + value.toLong())
                                 true
                             }
-                        }.pointerInput(day, zoom) {
-                            val secondsPerPixel = zoom.spanSeconds.toFloat() / size.width
-                            var exact = 0f
-                            detectHorizontalDragGestures(
-                                onDragStart = {
-                                    exact = (latestTime - day.start).toFloat()
-                                    scrubbed = latestTime
-                                },
-                                onDragEnd = {
-                                    scrubbed?.let { seek(it) }
-                                    scrubbed = null
-                                },
-                                onDragCancel = { scrubbed = null },
-                            ) { change, amount ->
-                                change.consume()
-                                // Dragging right brings earlier moments under the pointer.
-                                exact =
-                                    (exact - amount * secondsPerPixel)
-                                        .coerceIn(0f, (day.end - day.start - 1).toFloat())
-                                scrubbed = day.start + exact.toLong()
-                            }
-                        }.pointerInput(day, zoom) {
-                            val secondsPerPixel = zoom.spanSeconds.toFloat() / size.width
+                        }.scrollable(scroll, Orientation.Horizontal)
+                        .pointerInput(day, zoom) {
+                            val secondsPerPixel = zoom.spanSeconds.toDouble() / size.width
                             detectTapGestures { offset ->
                                 val away = (offset.x - size.width / 2f) * secondsPerPixel
-                                seek(latestTime + away.toLong())
+                                browseTo((browsed ?: latestTime.toDouble()) + away)
                             }
                         },
             ) {
@@ -205,39 +209,6 @@ fun TimelineBar(
                     Offset(center - 1.5.dp.toPx(), barTop - 8.dp.toPx()),
                     Size(3.dp.toPx(), barHeight + 16.dp.toPx()),
                     CornerRadius(2.dp.toPx()),
-                )
-            }
-        }
-    }
-}
-
-/** A picture of the moment under the finger, asked for once the finger rests briefly. */
-@Composable
-private fun ScrubPreview(
-    time: Long,
-    preview: suspend (Long) -> ByteArray?,
-) {
-    val picture by
-        produceState<ImageBitmap?>(null, time) {
-            delay(PREVIEW_PAUSE_MILLIS)
-            val bytes = preview(time) ?: return@produceState
-            value =
-                withContext(Dispatchers.Default) {
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                }
-        }
-    Surface(
-        modifier = Modifier.width(160.dp).aspectRatio(16f / 9f),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    ) {
-        Box(modifier = Modifier.padding(0.dp)) {
-            picture?.let {
-                Image(
-                    it,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }

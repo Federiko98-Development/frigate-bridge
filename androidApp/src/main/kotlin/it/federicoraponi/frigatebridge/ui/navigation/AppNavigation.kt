@@ -39,7 +39,6 @@ import it.federicoraponi.frigatebridge.ui.cameras.CamerasRoute
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
 import it.federicoraponi.frigatebridge.ui.events.EventRoute
 import it.federicoraponi.frigatebridge.ui.events.EventsRoute
-import it.federicoraponi.frigatebridge.ui.recordings.RecordingsRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerFormRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerListRoute
 import it.federicoraponi.frigatebridge.ui.settings.SettingsRoute
@@ -51,9 +50,6 @@ private data object Servers
 
 @Serializable
 private data object Cameras
-
-@Serializable
-private data object Recordings
 
 @Serializable
 private data object Events
@@ -106,7 +102,7 @@ private fun tabExit(): ExitTransition = fadeOut(tween(durationMillis = 90))
 
 private val NavBackStackEntry.isTab: Boolean
     get() =
-        listOf(Cameras::class, Recordings::class, Events::class, SettingsTab::class).any { destination.hasRoute(it) }
+        listOf(Cameras::class, Events::class, SettingsTab::class).any { destination.hasRoute(it) }
 
 private val AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs: Boolean
     get() = initialState.isTab && targetState.isTab
@@ -178,13 +174,6 @@ private fun AppNavHost(
                 onEditServer = { navController.navigate(ServerForm(it)) { launchSingleTop = true } },
                 onOpenCamera = { navController.openCamera(it, recording = false) },
                 bottomBar = { tabBar(MainTab.Cameras) },
-            )
-        }
-        composable<Recordings> {
-            RecordingsRoute(
-                onShowServers = { navController.showServers() },
-                onOpenRecording = { navController.openCamera(it, recording = true) },
-                bottomBar = { tabBar(MainTab.Recordings) },
             )
         }
         composable<Events> {
@@ -265,7 +254,6 @@ private fun NavHostController.openTab(tab: MainTab) {
     }
     val route: Any =
         when (tab) {
-            MainTab.Recordings -> Recordings
             MainTab.Events -> Events
             else -> SettingsTab
         }

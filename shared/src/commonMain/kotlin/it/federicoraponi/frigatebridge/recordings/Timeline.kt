@@ -34,6 +34,25 @@ fun recordedRanges(segments: List<RecordingSegment>): List<TimeRange> {
     return ranges
 }
 
+// Landing a little before the end shows the earlier recording before its video runs into the next one.
+private const val END_LEAD_SECONDS = 10L
+
+/**
+ * The recorded moment to show when [time] is asked for. In a pause, going [backwards] gives the end of the
+ * recording before it and going forward the start of the one after it, so the choice never jumps the other way.
+ * With nothing recorded on that side, the nearest recording on the other; `null` without any recording.
+ */
+fun recordedMoment(
+    ranges: List<TimeRange>,
+    time: Long,
+    backwards: Boolean,
+): Long? {
+    if (ranges.any { time >= it.start && time < it.end }) return time
+    val earlier = ranges.lastOrNull { it.end <= time }?.let { maxOf(it.start, it.end - END_LEAD_SECONDS) }
+    val later = ranges.firstOrNull { it.start > time }?.start
+    return if (backwards) earlier ?: later else later ?: earlier
+}
+
 private const val MILLIS = 1_000.0
 
 /**

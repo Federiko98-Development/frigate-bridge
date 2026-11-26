@@ -34,7 +34,7 @@ val playbackSpeeds = listOf(1f, 2f, 4f, 8f)
 
 private val exportLengths = listOf(30 to R.string.export_30s, 60 to R.string.export_1m, 300 to R.string.export_5m)
 
-/** Everything below the video of the recordings: day, timeline, transport, speed and export. */
+/** Everything below the video of the recordings: date, timeline, transport, speed and export. */
 @Composable
 fun RecordingsPanel(
     state: TimelineState,
@@ -52,13 +52,11 @@ fun RecordingsPanel(
     ) {
         // Nothing to show until the days with recordings are known.
         state.day?.let { day ->
-            if (state.days.size > 1) {
-                ConnectedChoice(
-                    labels = state.days.map { dayLabel(it.date) },
-                    selected = state.days.indexOfFirst { it.date == day.date },
-                    onSelect = { viewModel.selectDay(state.days[it].date) },
-                )
-            }
+            DaySelector(
+                selected = day.date,
+                available = state.days.map { it.date },
+                onSelect = viewModel::selectDay,
+            )
             TimelineBar(
                 day = day,
                 ranges = state.ranges,
@@ -66,7 +64,6 @@ fun RecordingsPanel(
                 time = state.time,
                 zoom = zoom,
                 onSeek = viewModel::seekTo,
-                preview = viewModel::preview,
             )
             ConnectedChoice(
                 labels =

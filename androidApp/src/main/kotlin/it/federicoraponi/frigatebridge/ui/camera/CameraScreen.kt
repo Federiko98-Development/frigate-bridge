@@ -414,7 +414,6 @@ private fun FullscreenTimeline(
                 time = state.time,
                 zoom = TimelineZoom.Minutes,
                 onSeek = viewModel::seekTo,
-                preview = viewModel::preview,
                 modifier = Modifier.weight(1f),
             )
         }

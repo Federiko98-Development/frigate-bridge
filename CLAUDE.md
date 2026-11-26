@@ -113,6 +113,7 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 
 ## Recordings and events
 
+- A moment chosen in a pause goes to the recording on the side the user was travelling towards.
 - `TimelineViewModel` loads one day of segments and plays it one hour at a time: a whole day does not fit in one
   VOD playlist. Frigate leaves the pauses out of the video, so `PlaybackWindow` translates positions into times.
 - Review moments (`/api/review`, always with `after`) mark the timeline and fill the events tab. Their pictures

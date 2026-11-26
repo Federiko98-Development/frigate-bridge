@@ -2,6 +2,7 @@ package it.federicoraponi.frigatebridge.recordings
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class TimelineTest {
     // Two files in a row, a pause of ten minutes, then a third one.
@@ -11,6 +12,20 @@ class TimelineTest {
             RecordingSegment(110.5, 120.5),
             RecordingSegment(720.0, 730.0),
         )
+
+    @Test
+    fun keepsARecordedMomentAndNeverJumpsAgainstTheDirectionOfTravel() {
+        val ranges = recordedRanges(segments)
+
+        assertEquals(105, recordedMoment(ranges, 105, backwards = true))
+        // In the pause: back to the end of the earlier recording, forward to the start of the later one.
+        assertEquals(110, recordedMoment(ranges, 400, backwards = true))
+        assertEquals(720, recordedMoment(ranges, 400, backwards = false))
+        // Outside the day's recordings there is only one way to go.
+        assertEquals(100, recordedMoment(ranges, 50, backwards = true))
+        assertEquals(720, recordedMoment(ranges, 900, backwards = false))
+        assertNull(recordedMoment(emptyList(), 400, backwards = true))
+    }
 
     @Test
     fun joinsConsecutiveFilesIntoRanges() {

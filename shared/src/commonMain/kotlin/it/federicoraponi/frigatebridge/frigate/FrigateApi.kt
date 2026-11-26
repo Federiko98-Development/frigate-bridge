@@ -131,13 +131,6 @@ class FrigateApi(
     ): List<RecordingDayDto> =
         decode(get("${camera.encodeURLPathPart()}/recordings/summary?timezone=${zoneId.encodeURLParameter()}"))
 
-    /** The frame recorded at [time], as a JPEG [height] pixels high. */
-    suspend fun recordedFrame(
-        camera: String,
-        time: Long,
-        height: Int,
-    ): ByteArray = bytes("api/${camera.encodeURLPathPart()}/recordings/$time/snapshot.jpg?height=$height")
-
     /** Review moments between two times, newest first. [cameras] and [labels] are `null` for all of them. */
     suspend fun reviews(
         after: Long,

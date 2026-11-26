@@ -15,7 +15,6 @@ import it.federicoraponi.frigatebridge.R
 /** The screens of the bottom bar. They all show the active server. */
 enum class MainTab {
     Cameras,
-    Recordings,
     Events,
     Settings,
 }
@@ -31,7 +30,6 @@ fun MainTabBar(
                 stringResource(
                     when (tab) {
                         MainTab.Cameras -> R.string.tab_cameras
-                        MainTab.Recordings -> R.string.tab_recordings
                         MainTab.Events -> R.string.tab_events
                         MainTab.Settings -> R.string.settings_title
                     },
@@ -43,7 +41,6 @@ fun MainTabBar(
                 icon = {
                     when (tab) {
                         MainTab.Cameras -> Icon(painterResource(R.drawable.ic_videocam), contentDescription = null)
-                        MainTab.Recordings -> Icon(painterResource(R.drawable.ic_movie), contentDescription = null)
                         MainTab.Events -> Icon(Icons.Filled.Notifications, contentDescription = null)
                         MainTab.Settings -> Icon(Icons.Filled.Settings, contentDescription = null)
                     }

@@ -9,12 +9,12 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 ## What works
 
 - Several Frigate servers, kept apart, with a default one and quick switching
-- Cameras as a grid or a list, a recordings tab, and settings for theme, language and previews
+- Cameras as a grid or a list, and settings for theme, language and previews
 - Sign-in with automatic renewal of the session, and a local plus an alternative address per server
 - Self-signed certificates, accepted once per server after checking the fingerprint
 - Cameras and camera groups of the selected server
 - Camera previews in the grid, live view (over HTTPS, or WebRTC), and playback of the last recorded minute
-- Recordings on a timeline, alerts and detections with filters, export and sharing of clips
+- Recordings on a timeline with a date picker, alerts and detections with filters, export and sharing of clips
 - A page for each alert or detection with its video, reachable from a link of another app
 - Keeps what it shows without a network, and reconnects when the phone changes network
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion

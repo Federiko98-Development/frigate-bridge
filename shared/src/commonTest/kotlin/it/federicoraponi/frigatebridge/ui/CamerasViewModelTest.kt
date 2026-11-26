@@ -75,7 +75,7 @@ class CamerasViewModelTest : ViewModelTest() {
             val offline = viewModel.state.first { it.isOffline }
             assertEquals(listOf("front_door", "garage"), offline.names())
 
-            // Another screen opened meanwhile, such as the recordings, shows the same cameras.
+            // Another screen opened meanwhile shows the same cameras.
             fixture.home.online = false
             val second = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
             assertEquals(listOf("front_door", "garage"), second.cameras("home").names())

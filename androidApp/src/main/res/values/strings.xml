@@ -68,7 +68,7 @@
     <string name="video_recording">Recording</string>
     <string name="video_failed">Video not available</string>
     <string name="control_failed">Command not completed</string>
-    <string name="video_no_recording">Nothing recorded in the last 24 hours</string>
+    <string name="video_no_recording">Nothing recorded on this day</string>
     <string name="video_first_frame">First frame after %1$d ms</string>
     <string name="video_round_trip">Network delay %1$d ms</string>
     <string name="video_mute">Mute</string>
@@ -81,12 +81,10 @@
     <string name="video_via_https">Live over HTTPS</string>
     <string name="video_no_audio">No compatible sound from this camera</string>
     <string name="tab_cameras">Cameras</string>
-    <string name="tab_recordings">Recordings</string>
     <string name="cameras_show_list">Show one camera per row</string>
     <string name="cameras_show_grid">Show as a grid</string>
     <string name="camera_recording">Recording</string>
     <string name="camera_detecting">Object detection on</string>
-    <string name="recordings_off">Recording is off</string>
     <string name="settings_title">Settings</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_theme">Theme</string>
@@ -170,7 +168,6 @@
     <string name="label_bus">Bus</string>
     <string name="label_bird">Bird</string>
     <string name="label_package">Package</string>
-    <string name="recordings_open">Open the timeline</string>
     <string name="event_open_timeline">Open in the timeline</string>
     <string name="event_what">Seen</string>
     <string name="event_kind">Type</string>
@@ -184,4 +181,6 @@
     <string name="link_rejected_title">This link cannot be opened</string>
     <string name="link_rejected_message">It does not point to a server saved in this app.</string>
     <string name="event_title">Event</string>
+    <string name="day_choose">Choose the date</string>
+    <string name="day_confirm">OK</string>
 </resources>
