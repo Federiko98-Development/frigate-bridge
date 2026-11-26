@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name" translatable="false">Frigate Bridge</string>
+    <string name="startup_platform">Running on %1$s</string>
+    <string name="startup_tap_count">Taps: %1$d</string>
+    <string name="startup_tap">Tap</string>
+</resources>
