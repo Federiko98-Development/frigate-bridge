@@ -3,7 +3,10 @@ package it.federicoraponi.frigatebridge.ui.recordings
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -16,31 +19,28 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.server.ExportDownload
+import it.federicoraponi.frigatebridge.server.ExportDownloads
 import it.federicoraponi.frigatebridge.server.ExportedFile
-import it.federicoraponi.frigatebridge.server.acceptingCertificate
+import it.federicoraponi.frigatebridge.ui.capture.newSharedFile
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.StatusText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.File
-import java.io.IOException
-import java.io.OutputStream
+import org.koin.compose.koinInject
 
-/** Downloads an export from the server into the cache and offers it to other apps. */
-suspend fun Context.downloadAndShare(export: ExportedFile) {
+/** Downloads an export into the cache and offers it to other apps. */
+private suspend fun Context.downloadAndShare(
+    name: String,
+    download: ExportDownload,
+) {
     val file =
         withContext(Dispatchers.IO) {
-            val folder = File(cacheDir, "exports").apply { mkdirs() }
-            // Only the last export is kept: videos are large.
-            folder.listFiles()?.forEach { it.delete() }
-            val target = File(folder, File(export.fileName).name)
-            target.outputStream().use { download(export, it) }
-            target
+            newSharedFile("exports", name) { output -> download.into { bytes, count -> output.write(bytes, 0, count) } }
         }
     val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
     val send =
@@ -51,26 +51,15 @@ suspend fun Context.downloadAndShare(export: ExportedFile) {
     startActivity(Intent.createChooser(send, null))
 }
 
-/** Copies an export from the server into [output]. Blocks: call it off the main thread. */
-fun download(
-    export: ExportedFile,
-    output: OutputStream,
-) {
-    val request = Request.Builder().url(export.url)
-    export.headers.forEach { (name, value) -> request.header(name, value) }
-    val http = OkHttpClient.Builder().acceptingCertificate(export.certificateSha256).build()
-    http.newCall(request.build()).execute().use { response ->
-        if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-        response.body.byteStream().copyTo(output)
-    }
-}
-
 /** Downloads exports to hand them to other apps, and tells how it is going. */
 @Stable
 class ExportSharing(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val downloads: ExportDownloads,
 ) {
+    private var job: Job? = null
+
     /** A download is in progress: its buttons give way to its progress. */
     var isBusy by mutableStateOf(false)
         private set
@@ -81,9 +70,10 @@ class ExportSharing(
 
     fun share(export: ExportedFile) {
         failure = null
+        val download = downloads.prepare(export)
         whileBusy {
             try {
-                context.downloadAndShare(export)
+                context.downloadAndShare(export.fileName, download)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
@@ -95,10 +85,19 @@ class ExportSharing(
     /** Runs [work], another download of the same file, showing the progress meanwhile. */
     fun whileBusy(work: suspend () -> Unit) {
         isBusy = true
-        scope.launch {
-            work()
-            isBusy = false
-        }
+        job =
+            scope.launch {
+                try {
+                    work()
+                } finally {
+                    isBusy = false
+                }
+            }
+    }
+
+    /** Stops the download in progress. The export stays on the server. */
+    fun cancel() {
+        job?.cancel()
     }
 }
 
@@ -106,14 +105,16 @@ class ExportSharing(
 fun rememberExportSharing(key: Any? = null): ExportSharing {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    return remember(context, key) { ExportSharing(context, scope) }
+    val downloads = koinInject<ExportDownloads>()
+    return remember(context, key) { ExportSharing(context, scope, downloads) }
 }
 
 /** Said while an export is being downloaded. */
 @Composable
-fun DownloadProgress() {
+fun DownloadProgress(onCancel: () -> Unit) {
     StatusText(stringResource(R.string.export_downloading))
     LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+    TextButton(onClick = onCancel, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.cancel)) }
 }
 
 /** Why the last share failed, if it did. */

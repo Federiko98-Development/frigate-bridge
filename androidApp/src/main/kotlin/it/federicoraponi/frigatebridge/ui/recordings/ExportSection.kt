@@ -57,7 +57,7 @@ private fun ReadyExport(
 ) {
     val sharing = rememberExportSharing(file)
     if (sharing.isBusy) {
-        DownloadProgress()
+        DownloadProgress(onCancel = sharing::cancel)
     } else {
         PrimaryButton(text = stringResource(R.string.export_share), onClick = { sharing.share(file) })
         TextButton(onClick = onDone, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.close)) }

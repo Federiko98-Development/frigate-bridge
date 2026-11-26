@@ -1,6 +1,7 @@
 package it.federicoraponi.frigatebridge.di
 
 import it.federicoraponi.frigatebridge.server.DataStoreServerStore
+import it.federicoraponi.frigatebridge.server.ExportDownloads
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSessionFactory
 import it.federicoraponi.frigatebridge.server.ServerStore
@@ -32,6 +33,7 @@ val sharedModule =
         single<SettingsStore> { DataStoreSettingsStore(get()) }
         single { ServerSessionFactory(get(), get()) }
         single { ServerRegistry(get(), get(), get()) }
+        single { ExportDownloads(get()) }
         viewModelOf(::StartViewModel)
         viewModelOf(::ServerListViewModel)
         viewModelOf(::CamerasViewModel)

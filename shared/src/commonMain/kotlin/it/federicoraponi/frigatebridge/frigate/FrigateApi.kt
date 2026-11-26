@@ -1,11 +1,15 @@
 package it.federicoraponi.frigatebridge.frigate
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeoutConfig
+import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
@@ -13,10 +17,12 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
+import io.ktor.http.contentLength
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import io.ktor.http.setCookie
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -42,6 +48,7 @@ interface TokenStore {
 
 private const val MAX_ERROR_LENGTH = 200
 private const val PREVIEW_QUALITY = 60
+private const val DOWNLOAD_BUFFER = 64 * 1024
 private const val API_ROOT = "api/"
 
 // Where Frigate keeps the files that its web server publishes at the top level.
@@ -230,6 +237,70 @@ class FrigateApi(
      */
     fun mediaUrl(serverPath: String): String =
         "${baseUrl.trimEnd('/')}/${serverPath.removePrefix(MEDIA_ROOT).trimStart('/')}"
+
+    /**
+     * Reads a file the server stores piece by piece into [receive], without keeping it in memory: videos are large.
+     * Each call to [receive] gets a buffer and how much of it is filled. Cancelling stops the download.
+     */
+    suspend fun download(
+        serverPath: String,
+        receive: suspend (bytes: ByteArray, count: Int) -> Unit,
+    ) {
+        val usedToken = tokens.read()
+        if (stream(serverPath, usedToken, receive)) return
+        // Refused before anything was received: once more with a new token.
+        val freshToken = renewToken(staleToken = usedToken)
+        if (!stream(serverPath, freshToken, receive)) throw FrigateError.LoginRejected()
+    }
+
+    /** `false` when the token was refused. */
+    private suspend fun stream(
+        serverPath: String,
+        token: String?,
+        receive: suspend (bytes: ByteArray, count: Int) -> Unit,
+    ): Boolean {
+        // A failure of the receiver, such as a full disk, says nothing about the server.
+        var receiving: Throwable? = null
+        return try {
+            http
+                .prepareGet(mediaUrl(serverPath)) {
+                    if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+                    // As long as it takes: only a silence of the server ends it.
+                    timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
+                }.execute { response ->
+                    if (response.status == HttpStatusCode.Unauthorized) return@execute false
+                    if (!response.status.isSuccess()) {
+                        throw FrigateError.UnexpectedResponse("HTTP ${response.status.value} on the file")
+                    }
+                    val channel = response.bodyAsChannel()
+                    val buffer = ByteArray(DOWNLOAD_BUFFER)
+                    var received = 0L
+                    while (true) {
+                        val count = channel.readAvailable(buffer, 0, buffer.size)
+                        if (count == -1) break
+                        if (count == 0) continue
+                        received += count
+                        try {
+                            receive(buffer, count)
+                        } catch (failure: Throwable) {
+                            receiving = failure
+                            throw failure
+                        }
+                    }
+                    // A connection that drops early must not pass for the end of the file.
+                    val expected = response.contentLength()
+                    if (expected != null && received < expected) throw FrigateError.Unreachable()
+                    true
+                }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            throw receiving
+                ?: failure as? FrigateError
+                ?: findCertificateRejection(failure)?.let { FrigateError.UntrustedCertificate(it.sha256Fingerprint) }
+                ?: FrigateError.Unreachable(failure)
+        }
+    }
 
     /** The bytes of a file the server stores. */
     suspend fun mediaFile(serverPath: String): ByteArray = bytes(serverPath.removePrefix(MEDIA_ROOT).trimStart('/'))

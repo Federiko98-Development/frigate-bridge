@@ -96,7 +96,7 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   `collectAsStateWithLifecycle()`; `XxxScreen` is stateless, takes state and callbacks, and has a `@Preview`.
 - Register ViewModels in `shared/.../di/SharedModule.kt`. For iOS also add a function to
   `iosMain/.../SharedViewModelStore.kt`.
-- Only the client in `shared` calls Frigate; screens never call the API.
+- Only the client in `shared` calls Frigate; screens never call the API. Downloads go through `ExportDownloads`.
 - Every object that belongs to a server carries its `serverId` (e.g. `CameraRef(serverId, cameraName)`).
 - Within a feature: `shared` with tests first, then the Compose screen.
 - Do not run tests unless asked: compiling is enough to check a change. CI runs them on every push to main.

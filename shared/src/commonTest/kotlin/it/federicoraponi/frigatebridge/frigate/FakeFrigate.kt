@@ -64,6 +64,7 @@ class FakeFrigate(
             "stats" -> respond("""{"service":{"uptime":120,"version":"$version"},"cameras":{}}""")
             "recordings/storage" -> respond("""{"front_door":{"usage":2048.0,"usage_percent":4.0}}""")
             "exports" -> respond(exports)
+            "/exports/clip.mp4" -> respond(EXPORTED)
             "exports/delete" -> respond("""{"success":true,"message":"Deleted"}""")
             "profiles" -> respond("""{"profiles":[],"active_profile":null,"last_activated":{}}""")
             "go2rtc/webrtc" -> respond("""{"type":"answer","sdp":"answer-for-${request.url.parameters["src"]}"}""")
@@ -100,6 +101,8 @@ class FakeFrigate(
     }
 
     companion object {
+        const val EXPORTED = "not really a video"
+
         /** A review moment of the front door, as `/api/review/{id}` describes it. */
         val MOMENT =
             """

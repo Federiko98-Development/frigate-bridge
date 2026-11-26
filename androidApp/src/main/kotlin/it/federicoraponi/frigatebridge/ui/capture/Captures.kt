@@ -10,11 +10,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.server.ExportDownloads
 import it.federicoraponi.frigatebridge.server.ExportedFile
-import it.federicoraponi.frigatebridge.ui.recordings.download
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 private const val JPEG_QUALITY = 95
 
@@ -22,6 +23,7 @@ private const val JPEG_QUALITY = 95
 class Captures(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val downloads: ExportDownloads,
 ) {
     val frames = FrameCapture()
     val messages = SnackbarHostState()
@@ -47,8 +49,11 @@ class Captures(
         camera: String,
         time: Long,
     ) {
+        val download = downloads.prepare(export)
         report(R.string.clip_saved) {
-            context.saveMedia(MediaKind.Clip, mediaName(camera, time, MediaKind.Clip)) { download(export, it) }
+            context.saveMedia(MediaKind.Clip, mediaName(camera, time, MediaKind.Clip)) { output ->
+                download.into { bytes, count -> output.write(bytes, 0, count) }
+            }
         }
     }
 
@@ -91,5 +96,6 @@ class Captures(
 fun rememberCaptures(): Captures {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    return remember(context) { Captures(context, scope) }
+    val downloads = koinInject<ExportDownloads>()
+    return remember(context) { Captures(context, scope, downloads) }
 }

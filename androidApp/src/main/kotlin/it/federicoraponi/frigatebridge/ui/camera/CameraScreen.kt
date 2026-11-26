@@ -41,6 +41,8 @@ import it.federicoraponi.frigatebridge.ui.designsystem.KeepScreenOn
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.recordings.RecordingsPanel
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -100,8 +102,11 @@ fun CameraRoute(
     val ready = state.clip as? ClipState.Ready
     LaunchedEffect(ready) {
         if (ready != null) {
-            captures.saveClip(ready.file, state.title, ready.startedAt)
-            viewModel.clearClip()
+            // Seen through even if the page goes meanwhile, e.g. because the app locks: once, and not again.
+            withContext(NonCancellable) {
+                captures.saveClip(ready.file, state.title, ready.startedAt)
+                viewModel.clearClip()
+            }
         }
     }
     // The video moves between the page and full screen without being rebuilt, so it keeps playing.

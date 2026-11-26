@@ -57,26 +57,52 @@ fun mediaName(
 suspend fun Context.saveMedia(
     kind: MediaKind,
     name: String,
-    write: (OutputStream) -> Unit,
+    write: suspend (OutputStream) -> Unit,
 ): SavedMedia =
     withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             addToGallery(kind, name, write)
         } else {
-            val folder = File(cacheDir, "captures").apply { mkdirs() }
-            folder.listFiles()?.forEach { it.delete() }
-            val file = File(folder, name)
-            file.outputStream().use(write)
+            val file = newSharedFile("captures", name, write)
             val uri = FileProvider.getUriForFile(this@saveMedia, "$packageName.files", file)
             SavedMedia(uri, kind, isInGallery = false)
         }
     }
 
+// Long after any app that was handed a file has read it.
+private const val KEEP_SHARED_MILLIS = 24 * 60 * 60 * 1_000L
+
+/**
+ * A new file of the cache to hand to other apps, made by [write] under a folder of its own, so that one still being
+ * read is never touched. Older ones are removed: videos are large. Call it off the main thread.
+ */
+internal suspend fun Context.newSharedFile(
+    folder: String,
+    name: String,
+    write: suspend (OutputStream) -> Unit,
+): File {
+    val root = File(cacheDir, folder)
+    val limit = System.currentTimeMillis() - KEEP_SHARED_MILLIS
+    root.listFiles()?.filter { it.lastModified() < limit }?.forEach { it.deleteRecursively() }
+    val own = File(root, System.nanoTime().toString()).apply { mkdirs() }
+    val target = File(own, File(name).name)
+    val partial = File(own, "${target.name}.part")
+    var complete = false
+    try {
+        partial.outputStream().use { write(it) }
+        complete = partial.renameTo(target)
+        if (!complete) throw IOException("The file could not be saved")
+    } finally {
+        if (!complete) own.deleteRecursively()
+    }
+    return target
+}
+
 @RequiresApi(Build.VERSION_CODES.Q)
-private fun Context.addToGallery(
+private suspend fun Context.addToGallery(
     kind: MediaKind,
     name: String,
-    write: (OutputStream) -> Unit,
+    write: suspend (OutputStream) -> Unit,
 ): SavedMedia {
     val volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
     val photo = kind == MediaKind.Photo
@@ -95,7 +121,7 @@ private fun Context.addToGallery(
     var complete = false
     try {
         val output = contentResolver.openOutputStream(uri) ?: throw IOException("The gallery refused the file")
-        output.use(write)
+        output.use { write(it) }
         val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
         contentResolver.update(uri, done, null, null)
         complete = true

@@ -158,7 +158,7 @@ fun ExportRoute(
             }
             state.file?.let { file ->
                 if (sharing.isBusy) {
-                    DownloadProgress()
+                    DownloadProgress(onCancel = sharing::cancel)
                 } else {
                     PrimaryButton(
                         text = stringResource(R.string.export_save),

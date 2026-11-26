@@ -62,6 +62,9 @@ data class RecordingClip(
 
 /** An export ready to be downloaded. */
 data class ExportedFile(
+    val serverId: String,
+    /** Where the server keeps it, to download it with. */
+    val path: String,
     val url: String,
     val fileName: String,
     val headers: Map<String, String>,
@@ -333,6 +336,8 @@ class ServerSession(
         val export = api.export(id)
         if (export.inProgress || export.videoPath.isBlank()) return null
         return ExportedFile(
+            serverId = server.id,
+            path = export.videoPath,
             url = api.mediaUrl(export.videoPath),
             fileName = export.videoPath.substringAfterLast('/'),
             headers = api.authorizationHeaders(),
@@ -359,12 +364,20 @@ class ServerSession(
     suspend fun fileOf(export: ExportItem): ExportedFile {
         val api = connectedApi()
         return ExportedFile(
+            serverId = server.id,
+            path = export.videoPath,
             url = api.mediaUrl(export.videoPath),
             fileName = export.videoPath.substringAfterLast('/'),
             headers = api.authorizationHeaders(),
             certificateSha256 = server.certificateSha256,
         )
     }
+
+    /** Reads an exported file piece by piece, see [FrigateApi.download]. */
+    suspend fun download(
+        file: ExportedFile,
+        receive: suspend (bytes: ByteArray, count: Int) -> Unit,
+    ) = connectedApi().download(file.path, receive)
 
     suspend fun deleteExport(id: String) = connectedApi().deleteExports(listOf(id))
 
