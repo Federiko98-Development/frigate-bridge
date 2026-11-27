@@ -1,8 +1,6 @@
 package it.federicoraponi.frigatebridge.ui.recordings
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -21,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -54,7 +53,7 @@ fun DaySelector(
     var picking by rememberSaveable { mutableStateOf(false) }
     val description = stringResource(R.string.day_choose)
     FilledTonalButton(onClick = { picking = true }, shapes = ButtonDefaults.shapes(), modifier = modifier) {
-        Icon(Icons.Filled.DateRange, contentDescription = description)
+        Icon(Symbols.DateRange, contentDescription = description)
         Text(dayLabel(selected), modifier = Modifier.padding(start = Spacing.sm))
     }
     if (picking) {

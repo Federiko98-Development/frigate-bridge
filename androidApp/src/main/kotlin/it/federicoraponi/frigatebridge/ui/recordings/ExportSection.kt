@@ -2,8 +2,6 @@ package it.federicoraponi.frigatebridge.ui.recordings
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -20,6 +18,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.StatusText
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 
 /** The button that starts an export, then its progress and its outcome. */
@@ -32,7 +31,7 @@ fun ExportSection(
     when (export) {
         ExportState.None ->
             FilledTonalButton(onClick = onChoose, shapes = ButtonDefaults.shapes()) {
-                Icon(Icons.Filled.Share, contentDescription = null)
+                Icon(Symbols.Share, contentDescription = null)
                 Text(stringResource(R.string.export_clip), modifier = Modifier.padding(start = Spacing.sm))
             }
         ExportState.Working -> {

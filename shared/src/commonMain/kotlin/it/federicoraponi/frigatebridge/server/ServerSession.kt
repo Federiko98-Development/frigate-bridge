@@ -4,7 +4,11 @@ import io.ktor.client.HttpClient
 import it.federicoraponi.frigatebridge.camera.CameraCatalog
 import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.camera.CameraRef
+import it.federicoraponi.frigatebridge.camera.EditableGroup
 import it.federicoraponi.frigatebridge.camera.cameraCatalog
+import it.federicoraponi.frigatebridge.camera.groupChange
+import it.federicoraponi.frigatebridge.camera.groupOrderChange
+import it.federicoraponi.frigatebridge.camera.groupRemoval
 import it.federicoraponi.frigatebridge.frigate.Credentials
 import it.federicoraponi.frigatebridge.frigate.ExportDto
 import it.federicoraponi.frigatebridge.frigate.FrigateApi
@@ -24,6 +28,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
@@ -33,6 +38,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlin.math.ceil
 
 data class ServerSnapshot(
@@ -41,6 +48,10 @@ data class ServerSnapshot(
     val version: String,
     val isSupportedVersion: Boolean,
     val catalog: CameraCatalog,
+    /** Who the app is signed in as. */
+    val account: Account = Account("", "viewer"),
+    /** `false` when the server does not sign users in. */
+    val authEnabled: Boolean = true,
 )
 
 /** What a player needs to show a live stream carried over HTTPS. */
@@ -70,6 +81,9 @@ data class ExportedFile(
     val headers: Map<String, String>,
     val certificateSha256: String?,
 )
+
+// Bad gateway and gateway timeout.
+private val GATEWAY_FAILURES = setOf(502, 504)
 
 private fun ReviewDto.toItem(serverId: String) =
     ReviewItem(
@@ -117,7 +131,9 @@ class ServerSession(
     val server: Server,
     private val http: HttpClient,
     credentials: suspend () -> Credentials?,
-    tokens: TokenStore,
+    private val tokens: TokenStore,
+    /** Saves a new password of the signed-in user, for the logins to come. */
+    private val storePassword: suspend (String) -> Unit = {},
 ) {
     private val apis = server.addresses.map { url -> url to FrigateApi(http, url, credentials, tokens) }
     private val refreshMutex = Mutex()
@@ -138,6 +154,10 @@ class ServerSession(
                 ?.cameras
                 ?.associate { it.ref.cameraName to it.displayName }
                 .orEmpty()
+
+    /** Who the app is signed in as, or `null` while not connected. */
+    val account: Account?
+        get() = (state.value as? ConnectionState.Connected)?.snapshot?.account
 
     /** Connects and reads cameras and groups. Failures end up in [state] and are not thrown. */
     suspend fun refresh(): ConnectionState =
@@ -176,6 +196,22 @@ class ServerSession(
     ) {
         connectedApi().setCameraFeature(camera, feature.apiName, enabled)
         refresh()
+    }
+
+    /**
+     * Switches several functions of a camera, by Frigate's names and in the order given, then reads the server, also
+     * after a failure, which leaves only some switched.
+     */
+    suspend fun setCameraFeatures(
+        camera: String,
+        changes: List<Pair<String, Boolean>>,
+    ) {
+        val api = connectedApi()
+        try {
+            changes.forEach { (feature, enabled) -> api.setCameraFeature(camera, feature, enabled) }
+        } finally {
+            refresh()
+        }
     }
 
     suspend fun ptzInfo(camera: String): PtzInfoDto = connectedApi().ptzInfo(camera)
@@ -281,6 +317,9 @@ class ServerSession(
     suspend fun review(id: String): ReviewItem = connectedApi().review(id).toItem(server.id)
 
     suspend fun markReviewed(ids: List<String>) = connectedApi().markReviewed(ids)
+
+    /** Removes review moments, with the recordings of those intervals. */
+    suspend fun deleteReviews(ids: List<String>) = connectedApi().deleteReviews(ids)
 
     suspend fun mediaFile(serverPath: String): ByteArray = connectedApi().mediaFile(serverPath)
 
@@ -396,6 +435,128 @@ class ServerSession(
         }
     }
 
+    /** Reads the configuration again, bypassing the proxy cache. */
+    suspend fun adminConfig(): AdminConfig = adminConfig(connectedApi().config())
+
+    /** Every user of the server. Needs the administrator role, as the other changes to users do. */
+    suspend fun users(): List<FrigateUser> = connectedApi().users().map { FrigateUser(it.username, it.role) }
+
+    suspend fun createUser(
+        username: String,
+        password: String,
+        role: String,
+    ) = connectedApi().createUser(username, password, role)
+
+    suspend fun deleteUser(username: String) = connectedApi().deleteUser(username)
+
+    suspend fun setUserRole(
+        username: String,
+        role: String,
+    ) = connectedApi().setUserRole(username, role)
+
+    /** Sets another user's password, as an administrator. Throws IllegalArgumentException for the signed-in user. */
+    suspend fun setUserPassword(
+        username: String,
+        password: String,
+    ) {
+        val api = connectedApi()
+        require(username != account?.username) { "Use changeOwnPassword for the signed-in user" }
+        api.setPassword(username, password, oldPassword = null)
+    }
+
+    /**
+     * Changes the signed-in user's password. Sends [current] as `old_password` (Frigate checks it only for
+     * non-administrators), then stores [new] as the saved password and the token the server returned, so the next
+     * login still works.
+     */
+    suspend fun changeOwnPassword(
+        current: String,
+        new: String,
+    ) {
+        val api = connectedApi()
+        val username = checkNotNull(account).username
+        // Once sent, the server may apply the change even if the screen is left: the new password must be saved.
+        withContext(NonCancellable) {
+            val token = api.setPassword(username, new, current)
+            storePassword(new)
+            if (token != null) tokens.write(token)
+            apis.forEach { it.second.resetLoginFailure() }
+        }
+    }
+
+    /** Creates or replaces a custom role, which applies at once. Checks that it was saved and reads the server. */
+    suspend fun saveRole(
+        name: String,
+        cameras: List<String>,
+    ) = writeConfig(roleChange(name, cameras), ROLES_TOPIC) { config ->
+        config.customRoles.any { it.name == name && it.cameras == cameras }
+    }
+
+    /** Moves [usersWithRole] to viewer one by one, then removes the role. A failure leaves the role in place. */
+    suspend fun deleteRole(
+        name: String,
+        usersWithRole: List<String>,
+    ) {
+        val api = connectedApi()
+        usersWithRole.forEach { api.setUserRole(it, "viewer") }
+        writeConfig(roleRemoval(name), ROLES_TOPIC) { config -> config.customRoles.none { it.name == name } }
+    }
+
+    /** Creates ([originalName] `null`) or replaces a camera group, renaming it when the name changed. */
+    suspend fun saveGroup(
+        originalName: String?,
+        group: EditableGroup,
+    ) = writeConfig(groupChange(originalName, group)) { config ->
+        group in config.groups &&
+            (originalName == null || originalName == group.name || config.groups.none { it.name == originalName })
+    }
+
+    suspend fun deleteGroup(name: String) =
+        writeConfig(groupRemoval(name)) { config -> config.groups.none { it.name == name } }
+
+    /** Numbers the camera groups from 1, in the order of [names]. */
+    suspend fun reorderGroups(names: List<String>) =
+        writeConfig(groupOrderChange(names)) { config ->
+            val orders = config.groups.associate { it.name to it.order }
+            names.withIndex().all { (index, name) -> orders[name] == index + 1 }
+        }
+
+    /** Restarts Frigate. */
+    suspend fun restart() {
+        val api = connectedApi()
+        // A server that is already down must not pass for one that is restarting.
+        api.version()
+        try {
+            api.restart()
+        } catch (_: FrigateError.Unreachable) {
+            // Frigate stops itself before it answers, so the answer may never arrive.
+        } catch (error: FrigateError.UnexpectedResponse) {
+            // Or the proxy answers in its place, finding it gone.
+            if (error.status !in GATEWAY_FAILURES) throw error
+        }
+    }
+
+    /** Drops the session token and reads the server again, e.g. after this user's role changed. */
+    suspend fun signInAgain() {
+        tokens.write(null)
+        apis.forEach { it.second.resetLoginFailure() }
+        refresh()
+    }
+
+    /**
+     * Changes the configuration, reads it again to check with [isSaved] that the change is there (Frigate reports
+     * success even when it could not write its file), then reads the server.
+     */
+    private suspend fun writeConfig(
+        data: JsonObject,
+        updateTopic: String? = null,
+        isSaved: (AdminConfig) -> Boolean,
+    ) {
+        connectedApi().setConfig(data, updateTopic)
+        if (!isSaved(adminConfig())) throw AdminNotSaved()
+        refresh()
+    }
+
     fun close() {
         socket?.cancel()
         socket = null
@@ -423,8 +584,16 @@ class ServerSession(
                     unreachable = error
                     continue
                 }
-            val catalog = cameraCatalog(server.id, api.config(), api.userProfile())
-            return ServerSnapshot(url, version, isSupportedFrigateVersion(version), catalog)
+            val config = api.config()
+            val profile = api.userProfile()
+            return ServerSnapshot(
+                url = url,
+                version = version,
+                isSupportedVersion = isSupportedFrigateVersion(version),
+                catalog = cameraCatalog(server.id, config, profile),
+                account = Account(profile.username, profile.role),
+                authEnabled = config.auth.enabled,
+            )
         }
         throw unreachable
     }

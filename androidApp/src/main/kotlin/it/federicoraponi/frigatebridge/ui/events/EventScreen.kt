@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -60,6 +58,7 @@ import it.federicoraponi.frigatebridge.ui.camera.PlayButton
 import it.federicoraponi.frigatebridge.ui.camera.RecordingPicture
 import it.federicoraponi.frigatebridge.ui.camera.SkipButton
 import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
+import it.federicoraponi.frigatebridge.ui.camera.VideoSeekBar
 import it.federicoraponi.frigatebridge.ui.camera.ZoomableVideo
 import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
 import it.federicoraponi.frigatebridge.ui.camera.seekBy
@@ -73,6 +72,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.StatusText
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.recordings.ExportSection
 import it.federicoraponi.frigatebridge.ui.recordings.clockTime
@@ -201,6 +201,7 @@ private fun EventScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             VideoFrame(video)
+            VideoSeekBar(player)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs),
@@ -290,7 +291,7 @@ private fun KeepButton(
     onClick: () -> Unit,
 ) {
     FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes()) {
-        Icon(Icons.Filled.Star, contentDescription = null)
+        Icon(Symbols.Star, contentDescription = null)
         Text(stringResource(label), modifier = Modifier.padding(start = Spacing.sm))
     }
 }

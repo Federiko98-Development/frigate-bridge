@@ -6,6 +6,7 @@ import android.os.LocaleList
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,33 +22,42 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.security.canAuthenticateUser
 import it.federicoraponi.frigatebridge.settings.AppSettings
+import it.federicoraponi.frigatebridge.settings.GroupButtons
 import it.federicoraponi.frigatebridge.settings.HomeLayout
 import it.federicoraponi.frigatebridge.settings.PreviewRefresh
 import it.federicoraponi.frigatebridge.settings.ThemeMode
+import it.federicoraponi.frigatebridge.ui.AccountEntry
 import it.federicoraponi.frigatebridge.ui.SettingsViewModel
 import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
+import it.federicoraponi.frigatebridge.ui.designsystem.ShapedIcon
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import org.koin.androidx.compose.koinViewModel
 
+private const val ADMIN_PAGES = 5
 private const val SOURCE_URL = "https://github.com/Federiko98-Development/frigate-bridge"
 
 data class SettingsActions(
     val setThemeMode: (ThemeMode) -> Unit = {},
     val setDynamicColor: (Boolean) -> Unit = {},
     val setHomeLayout: (HomeLayout) -> Unit = {},
+    val setGroupButtons: (GroupButtons) -> Unit = {},
     val setPreviewRefresh: (PreviewRefresh) -> Unit = {},
     val setSavePreviewData: (Boolean) -> Unit = {},
     val manageServers: () -> Unit = {},
@@ -55,6 +65,9 @@ data class SettingsActions(
     val openStatus: () -> Unit = {},
     val openExports: () -> Unit = {},
     val openSaved: () -> Unit = {},
+    val openAccess: () -> Unit = {},
+    val changePassword: () -> Unit = {},
+    val openCameraGroups: () -> Unit = {},
 )
 
 /** The app's settings. [onBack] is set when the screen was opened on top of another one, not as a tab. */
@@ -65,6 +78,9 @@ fun SettingsRoute(
     onOpenStatus: () -> Unit = {},
     onOpenExports: () -> Unit = {},
     onOpenSaved: () -> Unit = {},
+    onOpenAccess: () -> Unit = {},
+    onChangePassword: () -> Unit = {},
+    onOpenCameraGroups: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     viewModel: SettingsViewModel = koinViewModel(),
@@ -77,6 +93,7 @@ fun SettingsRoute(
                 setThemeMode = viewModel::setThemeMode,
                 setDynamicColor = viewModel::setDynamicColor,
                 setHomeLayout = viewModel::setHomeLayout,
+                setGroupButtons = viewModel::setGroupButtons,
                 setPreviewRefresh = viewModel::setPreviewRefresh,
                 setSavePreviewData = viewModel::setSavePreviewData,
                 manageServers = onManageServers,
@@ -84,8 +101,12 @@ fun SettingsRoute(
                 openStatus = onOpenStatus,
                 openExports = onOpenExports,
                 openSaved = onOpenSaved,
+                openAccess = onOpenAccess,
+                changePassword = onChangePassword,
+                openCameraGroups = onOpenCameraGroups,
             ),
         managedServer = state.managedServer,
+        account = state.account,
         // Looked up again every time the screen is drawn: the phone's screen lock may have just been set up.
         canLock = LocalContext.current.canAuthenticateUser(),
         onBack = onBack,
@@ -101,6 +122,8 @@ fun SettingsScreen(
     canLock: Boolean = true,
     /** The active server's name, when its administrator's pages are offered. */
     managedServer: String? = null,
+    /** The signed-in account of the active server, when its password can be changed here. */
+    account: AccountEntry? = null,
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
 ) {
@@ -131,7 +154,10 @@ fun SettingsScreen(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Language()
             Cameras(settings, actions)
             Security(settings.appLock, canLock, actions.setAppLock)
-            managedServer?.let { ThisServer(it, actions) }
+            // What concerns the active server is in one group, whoever is signed in.
+            (account?.serverName ?: managedServer)?.let {
+                ThisServer(it, account, isManaged = managedServer != null, actions)
+            }
             Servers(actions.manageServers)
             About()
         }
@@ -149,6 +175,7 @@ private fun Appearance(
     ListGroup(title = stringResource(R.string.settings_appearance)) {
         ChoiceItem(
             title = stringResource(R.string.settings_theme),
+            icon = Symbols.DarkMode,
             options =
                 listOf(
                     ThemeMode.System to stringResource(R.string.settings_system),
@@ -163,6 +190,7 @@ private fun Appearance(
         if (hasDynamicColor) {
             SwitchItem(
                 title = stringResource(R.string.settings_dynamic_color),
+                icon = Symbols.Palette,
                 description = stringResource(R.string.settings_dynamic_color_hint),
                 checked = settings.dynamicColor,
                 onCheckedChange = actions.setDynamicColor,
@@ -182,6 +210,7 @@ private fun Language() {
     ListGroup(title = stringResource(R.string.settings_language)) {
         ChoiceItem(
             title = stringResource(R.string.settings_app_language),
+            icon = Symbols.Language,
             options =
                 listOf(
                     "" to stringResource(R.string.settings_system),
@@ -206,6 +235,7 @@ private fun Security(
     ListGroup(title = stringResource(R.string.settings_security)) {
         SwitchItem(
             title = stringResource(R.string.settings_app_lock),
+            icon = Symbols.Lock,
             description =
                 stringResource(
                     if (canLock) R.string.settings_app_lock_hint else R.string.settings_app_lock_unavailable,
@@ -227,6 +257,7 @@ private fun Cameras(
     ListGroup(title = stringResource(R.string.settings_cameras)) {
         ChoiceItem(
             title = stringResource(R.string.settings_layout),
+            icon = Symbols.Dashboard,
             options =
                 listOf(
                     HomeLayout.Grid to stringResource(R.string.settings_layout_grid),
@@ -235,10 +266,24 @@ private fun Cameras(
             selected = settings.homeLayout,
             onSelect = actions.setHomeLayout,
             index = 0,
-            count = 3,
+            count = 4,
+        )
+        ChoiceItem(
+            title = stringResource(R.string.settings_group_buttons),
+            icon = Symbols.Label,
+            options =
+                listOf(
+                    GroupButtons.Names to stringResource(R.string.settings_group_buttons_names),
+                    GroupButtons.Icons to stringResource(R.string.settings_group_buttons_icons),
+                ),
+            selected = settings.groupButtons,
+            onSelect = actions.setGroupButtons,
+            index = 1,
+            count = 4,
         )
         ChoiceItem(
             title = stringResource(R.string.settings_previews),
+            icon = Symbols.Autorenew,
             options =
                 listOf(
                     PreviewRefresh.Fast to stringResource(R.string.settings_previews_fast),
@@ -247,16 +292,17 @@ private fun Cameras(
                 ),
             selected = settings.previewRefresh,
             onSelect = actions.setPreviewRefresh,
-            index = 1,
-            count = 3,
+            index = 2,
+            count = 4,
         )
         SwitchItem(
             title = stringResource(R.string.settings_save_data),
+            icon = Symbols.DataSaverOn,
             description = stringResource(R.string.settings_save_data_hint),
             checked = settings.savePreviewData,
             onCheckedChange = actions.setSavePreviewData,
-            index = 2,
-            count = 3,
+            index = 3,
+            count = 4,
         )
     }
 }
@@ -266,6 +312,7 @@ private fun Servers(onManage: () -> Unit) {
     ListGroup(title = stringResource(R.string.servers_title)) {
         LinkItem(
             title = stringResource(R.string.settings_manage_servers),
+            icon = Symbols.Dns,
             description = stringResource(R.string.settings_manage_servers_hint),
             onClick = onManage,
             index = 0,
@@ -277,30 +324,66 @@ private fun Servers(onManage: () -> Unit) {
 @Composable
 private fun ThisServer(
     name: String,
+    account: AccountEntry?,
+    isManaged: Boolean,
     actions: SettingsActions,
 ) {
+    // The password comes first, for those who have one; the administrator's pages follow.
+    val first = if (account == null) 0 else 1
+    val count = first + if (isManaged) ADMIN_PAGES else 0
     ListGroup(title = name) {
-        LinkItem(
-            title = stringResource(R.string.status_title),
-            description = stringResource(R.string.status_hint),
-            onClick = actions.openStatus,
-            index = 0,
-            count = 3,
-        )
-        LinkItem(
-            title = stringResource(R.string.saved_title),
-            description = stringResource(R.string.saved_hint),
-            onClick = actions.openSaved,
-            index = 1,
-            count = 3,
-        )
-        LinkItem(
-            title = stringResource(R.string.exports_title),
-            description = stringResource(R.string.exports_hint),
-            onClick = actions.openExports,
-            index = 2,
-            count = 3,
-        )
+        if (account != null) {
+            LinkItem(
+                title = stringResource(R.string.password_change_title),
+                icon = Symbols.Key,
+                description = stringResource(R.string.password_signed_in_as, account.username),
+                onClick = actions.changePassword,
+                index = 0,
+                count = count,
+            )
+        }
+        if (isManaged) {
+            LinkItem(
+                title = stringResource(R.string.status_title),
+                icon = Symbols.MonitorHeart,
+                description = stringResource(R.string.status_hint),
+                onClick = actions.openStatus,
+                index = first,
+                count = count,
+            )
+            LinkItem(
+                title = stringResource(R.string.saved_title),
+                icon = Symbols.Bookmark,
+                description = stringResource(R.string.saved_hint),
+                onClick = actions.openSaved,
+                index = first + 1,
+                count = count,
+            )
+            LinkItem(
+                title = stringResource(R.string.exports_title),
+                icon = Symbols.VideoLibrary,
+                description = stringResource(R.string.exports_hint),
+                onClick = actions.openExports,
+                index = first + 2,
+                count = count,
+            )
+            LinkItem(
+                title = stringResource(R.string.access_title),
+                icon = Symbols.Group,
+                description = stringResource(R.string.access_hint),
+                onClick = actions.openAccess,
+                index = first + 3,
+                count = count,
+            )
+            LinkItem(
+                title = stringResource(R.string.group_title),
+                icon = Symbols.Category,
+                description = stringResource(R.string.group_hint),
+                onClick = actions.openCameraGroups,
+                index = first + 4,
+                count = count,
+            )
+        }
     }
 }
 
@@ -316,6 +399,7 @@ private fun About() {
     ListGroup(title = stringResource(R.string.settings_about)) {
         LinkItem(
             title = stringResource(R.string.settings_source),
+            icon = Symbols.Code,
             description = stringResource(R.string.settings_about_hint, version),
             onClick = { uriHandler.openUri(SOURCE_URL) },
             index = 0,
@@ -327,6 +411,7 @@ private fun About() {
 @Composable
 private fun <T> ChoiceItem(
     title: String,
+    icon: ImageVector,
     options: List<Pair<T, String>>,
     selected: T,
     onSelect: (T) -> Unit,
@@ -338,16 +423,24 @@ private fun <T> ChoiceItem(
         shape = ListItemDefaults.segmentedShapes(index = index, count = count).shape,
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
-        Column(
+        // The icon stands in the middle of the whole card, beside the title and the choices.
+        Row(
             modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            ConnectedChoice(
-                labels = options.map { it.second },
-                selected = options.indexOfFirst { it.first == selected },
-                onSelect = { onSelect(options[it].first) },
-            )
+            SettingIcon(icon)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                ConnectedChoice(
+                    labels = options.map { it.second },
+                    selected = options.indexOfFirst { it.first == selected },
+                    onSelect = { onSelect(options[it].first) },
+                )
+            }
         }
     }
 }
@@ -355,6 +448,7 @@ private fun <T> ChoiceItem(
 @Composable
 private fun SwitchItem(
     title: String,
+    icon: ImageVector,
     description: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
@@ -373,6 +467,9 @@ private fun SwitchItem(
                 selectedContentColor = MaterialTheme.colorScheme.onSurface,
                 selectedSupportingContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             ),
+        leadingContent = { SettingIcon(icon) },
+        // Also beside a description of two lines, which would otherwise keep the icon at the top.
+        verticalAlignment = Alignment.CenterVertically,
         supportingContent = { Text(description, style = MaterialTheme.typography.bodySmall) },
         // The whole row toggles; the switch only shows the state.
         trailingContent = { Switch(checked = checked, onCheckedChange = null) },
@@ -382,6 +479,7 @@ private fun SwitchItem(
 @Composable
 private fun LinkItem(
     title: String,
+    icon: ImageVector,
     description: String,
     onClick: () -> Unit,
     index: Int,
@@ -391,9 +489,16 @@ private fun LinkItem(
         onClick = onClick,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        leadingContent = { SettingIcon(icon) },
+        // Also beside a description of two lines, which would otherwise keep the icon at the top.
+        verticalAlignment = Alignment.CenterVertically,
         supportingContent = { Text(description, style = MaterialTheme.typography.bodySmall) },
     ) { Text(title, style = MaterialTheme.typography.titleSmall) }
 }
+
+/** The accent beside each setting, which makes it quicker to find. */
+@Composable
+private fun SettingIcon(icon: ImageVector) = ShapedIcon(icon, size = 40.dp)
 
 @Preview
 @Composable

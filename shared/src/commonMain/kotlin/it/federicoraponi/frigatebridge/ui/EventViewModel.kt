@@ -17,8 +17,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 /** Which review moment of which server. */
 data class EventArgs(
@@ -185,22 +183,9 @@ class EventViewModel(
         }
     }
 
-    /** The first and last second of the video of [item]; a moment still going on ends now. */
-    @OptIn(ExperimentalTime::class)
-    private fun clipRange(item: ReviewItem): LongRange {
-        val start = item.start - PADDING_SECONDS
-        val end = item.end?.let { it + PADDING_SECONDS } ?: Clock.System.now().epochSeconds
-        // The server cannot put much more than an hour in one playlist.
-        return start..end.coerceIn(start + 1, start + MAXIMUM_SECONDS)
-    }
-
     private fun session(): ServerSession? {
         val session = registry.session(args.serverId)
         if (session == null) mutableState.update { it.copy(isGone = true) }
         return session
     }
 }
-
-// As Frigate's web interface shows a review moment.
-private const val PADDING_SECONDS = 4L
-private const val MAXIMUM_SECONDS = 3_600L

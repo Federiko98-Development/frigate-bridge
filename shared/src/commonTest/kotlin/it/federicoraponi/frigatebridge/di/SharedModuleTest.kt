@@ -7,8 +7,15 @@ import it.federicoraponi.frigatebridge.server.FakeNetwork
 import it.federicoraponi.frigatebridge.server.FakeNetworkMonitor
 import it.federicoraponi.frigatebridge.server.FakeSecretStore
 import it.federicoraponi.frigatebridge.server.HttpClientFactory
+import it.federicoraponi.frigatebridge.server.MemoryServerStore
 import it.federicoraponi.frigatebridge.server.SecretStore
+import it.federicoraponi.frigatebridge.server.ServerStore
+import it.federicoraponi.frigatebridge.ui.AccessViewModel
+import it.federicoraponi.frigatebridge.ui.CameraGroupEditorArgs
+import it.federicoraponi.frigatebridge.ui.CameraGroupEditorViewModel
+import it.federicoraponi.frigatebridge.ui.CameraGroupsViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.ChangePasswordViewModel
 import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
@@ -35,6 +42,8 @@ class SharedModuleTest : ViewModelTest() {
                 single<HttpClientFactory> { FakeNetwork() }
                 single<NetworkMonitor> { FakeNetworkMonitor() }
                 single<SecretStore> { FakeSecretStore() }
+                // ViewModels read the saved servers as soon as they are created.
+                single<ServerStore> { MemoryServerStore() }
                 single<DataStore<Preferences>> { UnusedDataStore() }
             }
         val application = koinApplication { modules(sharedModule, fakePlatform) }
@@ -44,6 +53,10 @@ class SharedModuleTest : ViewModelTest() {
         koin.get<StartViewModel>()
         koin.get<ServerListViewModel>()
         koin.get<CamerasViewModel>()
+        koin.get<AccessViewModel>()
+        koin.get<ChangePasswordViewModel>()
+        koin.get<CameraGroupsViewModel>()
+        koin.get<CameraGroupEditorViewModel> { parametersOf(CameraGroupEditorArgs("home", null)) }
 
         application.close()
     }

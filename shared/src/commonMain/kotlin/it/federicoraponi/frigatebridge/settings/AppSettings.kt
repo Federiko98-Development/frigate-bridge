@@ -18,6 +18,15 @@ enum class HomeLayout {
     List,
 }
 
+/** What the buttons of the camera groups show. */
+@Serializable
+enum class GroupButtons {
+    Names,
+
+    /** The group's icon, where the app knows it; otherwise its name. */
+    Icons,
+}
+
 /** How often the pictures of the cameras are loaded again. */
 @Serializable
 enum class PreviewRefresh(
@@ -32,9 +41,10 @@ enum class PreviewRefresh(
 @Serializable
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
-    /** Colours taken from the phone's wallpaper, where the system offers them. */
-    val dynamicColor: Boolean = true,
+    /** Colours taken from the phone's wallpaper, where the system offers them, instead of the app's blue. */
+    val dynamicColor: Boolean = false,
     val homeLayout: HomeLayout = HomeLayout.Grid,
+    val groupButtons: GroupButtons = GroupButtons.Names,
     val previewRefresh: PreviewRefresh = PreviewRefresh.Fast,
     /** On a metered connection, load pictures less often. */
     val savePreviewData: Boolean = true,
@@ -45,6 +55,11 @@ data class AppSettings(
      * closed meanwhile, as the server would otherwise go on with them.
      */
     val openRecordings: Set<String> = emptySet(),
+    /**
+     * For each camera put in live view only, as `serverId/camera`: Frigate's names of the functions that were on, to
+     * switch them back on.
+     */
+    val liveOnlyRestore: Map<String, Set<String>> = emptyMap(),
     /** Names of the cameras switched off in each group, kept by `camera/CameraSelection.kt`. */
     val hiddenCameras: Map<String, Set<String>> = emptyMap(),
 ) {

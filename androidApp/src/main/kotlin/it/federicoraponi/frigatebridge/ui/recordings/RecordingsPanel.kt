@@ -26,6 +26,7 @@ import androidx.media3.common.Player
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.TimelineState
 import it.federicoraponi.frigatebridge.ui.camera.RecordingTransport
+import it.federicoraponi.frigatebridge.ui.camera.VideoSeekBar
 import it.federicoraponi.frigatebridge.ui.designsystem.ConnectedChoice
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
@@ -42,6 +43,8 @@ data class RecordingsActions(
     val selectDay: (String) -> Unit = {},
     val seekTo: (Long) -> Unit = {},
     val skip: (Int) -> Unit = {},
+    /** The video was dragged to this position of the stretch being played. */
+    val scrubbed: (Long) -> Unit = {},
     val export: (start: Long, seconds: Int) -> Unit = { _, _ -> },
     val clearExport: () -> Unit = {},
     val setSpeed: (Float) -> Unit = {},
@@ -91,6 +94,7 @@ fun RecordingsPanel(
             )
             // Nothing to move through on a day without recordings.
             if (state.ranges.isNotEmpty()) {
+                VideoSeekBar(player, onSeeked = actions.scrubbed)
                 RecordingTransport(player, onSkip = actions.skip)
                 ConnectedChoice(
                     labels = playbackSpeeds.map { "${it.toInt()}×" },
@@ -99,7 +103,7 @@ fun RecordingsPanel(
                 )
                 actions.takePhoto?.let { take ->
                     FilledTonalButton(onClick = take, shapes = ButtonDefaults.shapes()) {
-                        Icon(painterResource(R.drawable.ic_photo_camera), contentDescription = null)
+                        Icon(painterResource(R.drawable.symbol_photo_camera), contentDescription = null)
                         Text(stringResource(R.string.photo_take), modifier = Modifier.padding(start = Spacing.sm))
                     }
                 }

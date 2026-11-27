@@ -3,9 +3,18 @@ package it.federicoraponi.frigatebridge.frigate
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import it.federicoraponi.frigatebridge.camera.EditableGroup
+import it.federicoraponi.frigatebridge.camera.groupChange
+import it.federicoraponi.frigatebridge.camera.groupOrderChange
+import it.federicoraponi.frigatebridge.camera.groupRemoval
+import it.federicoraponi.frigatebridge.server.ROLES_TOPIC
+import it.federicoraponi.frigatebridge.server.roleChange
+import it.federicoraponi.frigatebridge.server.roleRemoval
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
@@ -196,6 +205,189 @@ class FrigateApiTest {
             assertEquals(false, config.cameras.getValue("garage").enabled)
             assertEquals(listOf("garden", "front_door"), config.cameraGroups.getValue("Outside").cameras)
             assertEquals(listOf("garage"), config.cameraGroups.getValue("Indoor").cameras)
+        }
+
+    @Test
+    fun readsTheUsersAndTakesAMissingRoleForViewer() =
+        runTest {
+            val body = """[{"username": "admin", "role": "admin"}, {"username": "guest", "role": null}]"""
+            val http = HttpClient(MockEngine { respond(body) })
+
+            assertEquals(listOf(UserDto("admin", "admin"), UserDto("guest", "viewer")), api(http = http).users())
+        }
+
+    @Test
+    fun createsAUser() =
+        runTest {
+            api().createUser("guest", "made-up-password", "viewer")
+
+            val request = server.requests.last()
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("/api/users", request.url.encodedPath)
+            assertEquals(
+                """{"username":"guest","password":"made-up-password","role":"viewer"}""",
+                request.body.toByteArray().decodeToString(),
+            )
+            assertEquals("viewer", server.users["guest"])
+        }
+
+    @Test
+    fun reportsFrigatesExplanationOfARefusal() =
+        runTest {
+            val error =
+                assertFailsWith<FrigateError.UnexpectedResponse> { api().createUser("guest", "short", "viewer") }
+
+            assertEquals(400, error.status)
+            assertEquals("Password must be at least 12 characters long", error.serverMessage)
+        }
+
+    @Test
+    fun aWrongCurrentPasswordDoesNotCauseANewLogin() =
+        runTest {
+            server.users[server.username] = "viewer"
+            val api = api()
+            api.version()
+            val logins = server.loginCount
+
+            val error =
+                assertFailsWith<FrigateError.UnexpectedResponse> {
+                    api.setPassword(server.username, "another-made-up-password", "not-the-password")
+                }
+
+            assertEquals(401, error.status)
+            assertEquals("Current password is incorrect", error.serverMessage)
+            assertEquals(logins, server.loginCount)
+            assertEquals(1, server.requests.count { it.url.encodedPath.endsWith("/password") })
+        }
+
+    @Test
+    fun aWrongCurrentPasswordAfterARenewedLoginIsNotARejectedLogin() =
+        runTest {
+            var passwordRequests = 0
+            val http =
+                HttpClient(
+                    MockEngine { request ->
+                        when {
+                            request.url.encodedPath.endsWith("/version") -> respond("0.18.3")
+                            request.url.encodedPath.endsWith("/login") ->
+                                respond("", headers = headersOf(HttpHeaders.SetCookie, "token=a.b.c"))
+                            // First as the proxy refuses an expired token, then as Frigate refuses the password.
+                            ++passwordRequests == 1 -> respond("", HttpStatusCode.Unauthorized)
+                            else ->
+                                respond(
+                                    """{"message":"Current password is incorrect"}""",
+                                    HttpStatusCode.Unauthorized,
+                                )
+                        }
+                    },
+                )
+
+            val error =
+                assertFailsWith<FrigateError.UnexpectedResponse> {
+                    api(http = http).setPassword("guest", "another-made-up-password", "not-the-password")
+                }
+
+            assertEquals(401, error.status)
+            assertEquals(2, passwordRequests)
+        }
+
+    @Test
+    fun changingOnesOwnPasswordReturnsTheNewToken() =
+        runTest {
+            val api = api()
+
+            val token = api.setPassword(server.username, "another-made-up-password", server.password)
+
+            assertEquals("header.own1.signature", token)
+            assertEquals("another-made-up-password", server.password)
+        }
+
+    @Test
+    fun settingAnotherPasswordSendsNoOldPasswordAndReturnsNoToken() =
+        runTest {
+            server.users["guest"] = "viewer"
+
+            assertNull(api().setPassword("guest", "another-made-up-password", oldPassword = null))
+
+            assertEquals(
+                """{"password":"another-made-up-password"}""",
+                server.requests
+                    .last()
+                    .body
+                    .toByteArray()
+                    .decodeToString(),
+            )
+        }
+
+    @Test
+    fun renamesAGroupDeletingTheOldNameFirst() =
+        runTest {
+            server.config = """{"camera_groups": {"Old_name": {"cameras": ["garden"], "order": 3}}}"""
+            val group = EditableGroup("New_name", listOf("front_door", "garden"), "LuCar", 3)
+
+            api().setConfig(groupChange("Old_name", group))
+
+            assertEquals(
+                """{"requires_restart":0,"config_data":{"camera_groups":{"Old_name":"",""" +
+                    """"New_name":{"order":3,"icon":"LuCar","cameras":["front_door","garden"]}}}}""",
+                server.configSetBodies.single(),
+            )
+            assertEquals(setOf("New_name"), api().config().cameraGroups.keys)
+        }
+
+    @Test
+    fun writesOnlyTheRoleThatChangesAndAnnouncesIt() =
+        runTest {
+            val api = api()
+
+            api.setConfig(roleChange("garden_only", listOf("garden")), ROLES_TOPIC)
+            assertEquals(mapOf("garden_only" to listOf("garden")), api.config().auth.roles)
+            api.setConfig(roleRemoval("garden_only"), ROLES_TOPIC)
+
+            assertEquals(
+                listOf(
+                    """{"requires_restart":0,"config_data":{"auth":{"roles":{"garden_only":["garden"]}}},""" +
+                        """"update_topic":"config/auth"}""",
+                    """{"requires_restart":0,"config_data":{"auth":{"roles":{"garden_only":""}}},""" +
+                        """"update_topic":"config/auth"}""",
+                ),
+                server.configSetBodies,
+            )
+            assertEquals(emptyMap(), api.config().auth.roles)
+        }
+
+    @Test
+    fun deletesAndReordersGroups() =
+        runTest {
+            val api = api()
+
+            api.setConfig(groupOrderChange(listOf("Outside", "Indoor")))
+            val reordered = api.config().cameraGroups
+            assertEquals(1, reordered.getValue("Outside").order)
+            assertEquals(2, reordered.getValue("Indoor").order)
+            assertEquals("tree", reordered.getValue("Outside").icon)
+            api.setConfig(groupRemoval("Outside"))
+
+            assertEquals(setOf("Indoor"), api.config().cameraGroups.keys)
+            assertEquals(
+                """{"requires_restart":0,"config_data":{"camera_groups":{"Outside":""}}}""",
+                server.configSetBodies.last(),
+            )
+        }
+
+    @Test
+    fun skipsTheProxyCacheOnlyWhenReadingUsersAndConfig() =
+        runTest {
+            val api = api()
+
+            api.users()
+            assertEquals("1", server.requests.last().headers["X-Cache-Bypass"])
+            api.config()
+            assertEquals("1", server.requests.last().headers["X-Cache-Bypass"])
+            api.createUser("guest", "made-up-password", "viewer")
+            assertNull(server.requests.last().headers["X-Cache-Bypass"])
+            api.version()
+            assertNull(server.requests.last().headers["X-Cache-Bypass"])
         }
 
     @Test

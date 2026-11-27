@@ -1,5 +1,6 @@
 package it.federicoraponi.frigatebridge.camera
 
+import it.federicoraponi.frigatebridge.frigate.CameraConfigDto
 import it.federicoraponi.frigatebridge.frigate.ConfigDto
 import it.federicoraponi.frigatebridge.frigate.UserProfileDto
 
@@ -21,6 +22,8 @@ data class Camera(
     val isDetecting: Boolean = false,
     val isDetectingMotion: Boolean = false,
     val isSavingSnapshots: Boolean = false,
+    /** Listening for sounds to detect. The app only switches it together with the rest, for the live view alone. */
+    val isDetectingAudio: Boolean = false,
     /** `false` when recording is disabled in the configuration file and cannot be turned on from here. */
     val canRecord: Boolean = true,
     /** The camera may be movable; the server tells what it supports. */
@@ -46,6 +49,8 @@ data class LiveStream(
 data class CameraGroup(
     val name: String,
     val cameras: List<CameraRef>,
+    /** The name of the icon chosen for the group, as the configuration holds it. */
+    val icon: String = "generic",
 )
 
 data class CameraCatalog(
@@ -62,6 +67,16 @@ data class CameraCatalog(
     }
 }
 
+/** Every camera of the configuration, in the order of the Frigate web interface. */
+internal fun ConfigDto.camerasInOrder(): List<Pair<String, CameraConfigDto>> =
+    cameras.entries
+        .sortedWith(compareBy({ it.value.ui.order }, { it.key }))
+        .map { it.key to it.value }
+
+/** How the camera called [name] on the server is shown to the user. */
+internal fun CameraConfigDto.displayName(name: String): String =
+    friendlyName?.takeIf { it.isNotBlank() } ?: name.replace('_', ' ')
+
 /** Builds the cameras that this user may see, in the order of the Frigate web interface. */
 fun cameraCatalog(
     serverId: String,
@@ -70,13 +85,13 @@ fun cameraCatalog(
 ): CameraCatalog {
     val allowed = profile.allowedCameras?.toSet()
     val cameras =
-        config.cameras.entries
+        config
+            .camerasInOrder()
             .filter { (name, _) -> allowed == null || name in allowed }
-            .sortedWith(compareBy({ it.value.ui.order }, { it.key }))
             .map { (name, camera) ->
                 Camera(
                     ref = CameraRef(serverId, name),
-                    displayName = camera.friendlyName?.takeIf { it.isNotBlank() } ?: name.replace('_', ' '),
+                    displayName = camera.displayName(name),
                     enabled = camera.enabled,
                     onDashboard = camera.ui.dashboard,
                     // Without a configured mapping the go2rtc stream carries the camera's name.
@@ -88,6 +103,7 @@ fun cameraCatalog(
                     isDetecting = camera.detect.enabled,
                     isDetectingMotion = camera.motion.enabled,
                     isSavingSnapshots = camera.snapshots.enabled,
+                    isDetectingAudio = camera.audio.enabled,
                     canRecord = camera.record.enabledInConfig != false,
                     hasPtz = camera.onvif.host.isNotBlank(),
                 )
@@ -97,7 +113,7 @@ fun cameraCatalog(
         config.cameraGroups.entries
             .sortedWith(compareBy({ it.value.order }, { it.key }))
             .map { (name, group) ->
-                CameraGroup(name, group.cameras.filter { it in visible }.map { CameraRef(serverId, it) })
+                CameraGroup(name, group.cameras.filter { it in visible }.map { CameraRef(serverId, it) }, group.icon)
             }.filter { it.cameras.isNotEmpty() }
     return CameraCatalog(cameras, groups, canChangeSettings = profile.role == "admin")
 }

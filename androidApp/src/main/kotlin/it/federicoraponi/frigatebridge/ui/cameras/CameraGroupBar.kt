@@ -3,18 +3,19 @@ package it.federicoraponi.frigatebridge.ui.cameras
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -29,9 +30,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -42,10 +45,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.camera.GroupChoice
+import it.federicoraponi.frigatebridge.settings.GroupButtons
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
+import it.federicoraponi.frigatebridge.ui.groups.knownGroupIcon
+
+/** What the group buttons show, as chosen in the settings. */
+val LocalGroupButtons = staticCompositionLocalOf { GroupButtons.Names }
 
 @Composable
 private fun groupName(name: String?) = name?.replace('_', ' ') ?: stringResource(R.string.cameras_all)
@@ -64,6 +73,7 @@ fun CameraGroupBar(
 ) {
     // The index, rather than the name, survives a rotation also for "all cameras".
     var editing by rememberSaveable { mutableStateOf<Int?>(null) }
+    val showsIcons = LocalGroupButtons.current == GroupButtons.Icons
     val choose = stringResource(R.string.cameras_choose)
     Row(
         modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
@@ -72,6 +82,13 @@ fun CameraGroupBar(
         choices.forEachIndexed { index, choice ->
             val count = "${choice.shown.size}/${choice.cameras.size}"
             val name = groupName(choice.name)
+            // A group whose icon the app does not know keeps its name.
+            val icon =
+                when {
+                    !showsIcons -> null
+                    choice.name == null -> Symbols.Apps
+                    else -> choice.icon?.let { knownGroupIcon(it) }
+                }
             val shown =
                 pluralStringResource(
                     R.plurals.cameras_shown_count,
@@ -80,7 +97,13 @@ fun CameraGroupBar(
                     choice.cameras.size,
                 )
             GroupButton(
-                label = name + if (choice.isPartial) " · $count" else "",
+                label =
+                    when {
+                        icon == null -> name + if (choice.isPartial) " · $count" else ""
+                        choice.isPartial -> count
+                        else -> null
+                    },
+                icon = icon,
                 // "3/5" read aloud says less than "3 of 5 cameras shown".
                 description = if (choice.isPartial) "$name, $shown" else name,
                 isSelected = choice.name == selected,
@@ -109,7 +132,8 @@ fun CameraGroupBar(
 // A toggle button keeps its clicks to itself, so holding it could not be heard.
 @Composable
 private fun GroupButton(
-    label: String,
+    label: String?,
+    icon: ImageVector?,
     description: String,
     isSelected: Boolean,
     index: Int,
@@ -145,11 +169,16 @@ private fun GroupButton(
                     contentDescription = description
                 },
     ) {
-        Box(
+        Row(
             modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = Spacing.lg),
-            contentAlignment = Alignment.Center,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clearAndSetSemantics {})
+            // The description of the button says what the icon and the count stand for.
+            icon?.let { Icon(it, contentDescription = null, modifier = Modifier.size(20.dp)) }
+            label?.let {
+                Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clearAndSetSemantics {})
+            }
         }
     }
 }

@@ -26,9 +26,12 @@ internal suspend fun ServerSession.cutExport(
     start: Long,
     end: Long,
     name: String? = null,
+    /** Told the export's id as soon as the server has one, also if waiting for the file then fails. */
+    onStarted: (String) -> Unit = {},
 ): ExportState =
     try {
         val id = startExport(camera, start, end, name)
+        onStarted(id)
         var file: ExportedFile? = null
         var checks = 0
         while (file == null && checks++ < EXPORT_CHECKS) {

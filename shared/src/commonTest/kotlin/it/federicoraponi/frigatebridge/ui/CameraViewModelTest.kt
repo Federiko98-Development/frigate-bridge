@@ -36,6 +36,55 @@ class CameraViewModelTest : ViewModelTest() {
     }
 
     @Test
+    fun leavesTheLiveViewAloneSwitchingDetectionBeforeMotion() =
+        runTest {
+            fixture.home.config =
+                """{"cameras": {"front_door": {"record": {"enabled": true}, "detect": {"enabled": true},""" +
+                """"motion": {"enabled": true}}}}"""
+            val viewModel = frontDoor()
+            viewModel.state.first { it.controls.enabled.isNotEmpty() }
+
+            viewModel.setLiveOnly(true)
+            viewModel.state.first { !it.controls.isApplying }
+
+            assertEquals(
+                listOf("recordings", "detect", "motion").map { """$it={"value":"OFF"}""" },
+                fixture.home.cameraChanges,
+            )
+            assertEquals(
+                setOf("recordings", "detect", "motion"),
+                fixture.settings.settings
+                    .first()
+                    .liveOnlyRestore["home/front_door"],
+            )
+        }
+
+    @Test
+    fun bringsBackWhatWasOnBeforeTheLiveViewAlone() =
+        runTest {
+            fixture.home.config = """{"cameras": {"front_door": {"record": {"enabled_in_config": true}}}}"""
+            fixture.settings.update {
+                it.copy(liveOnlyRestore = mapOf("home/front_door" to setOf("detect", "motion", "audio")))
+            }
+            val viewModel = frontDoor()
+            viewModel.state.first { it.controls.isLiveOnly }
+
+            viewModel.setLiveOnly(false)
+            viewModel.state.first { !it.controls.isApplying }
+
+            assertEquals(
+                listOf("motion", "detect", "audio").map { """$it={"value":"ON"}""" },
+                fixture.home.cameraChanges,
+            )
+            assertEquals(
+                emptyMap(),
+                fixture.settings.settings
+                    .first()
+                    .liveOnlyRestore,
+            )
+        }
+
+    @Test
     fun recordsAClipAndPreparesItsFile() =
         runTest {
             fixture.home.config = """{"cameras": {"front_door": {"record": {"enabled": true}}}}"""

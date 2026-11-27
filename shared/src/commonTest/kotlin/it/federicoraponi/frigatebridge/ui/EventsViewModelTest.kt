@@ -1,10 +1,15 @@
 package it.federicoraponi.frigatebridge.ui
 
+import it.federicoraponi.frigatebridge.frigate.FakeFrigate
 import it.federicoraponi.frigatebridge.recordings.momentOfDay
 import it.federicoraponi.frigatebridge.recordings.recordingDay
 import it.federicoraponi.frigatebridge.server.Fixture
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,6 +30,69 @@ class EventsViewModelTest : ViewModelTest() {
         fixture.home.requests
             .last { it.url.encodedPath.endsWith("/api/review") }
             .url.parameters[name]
+
+    @Test
+    fun deletesTheChosenMoments() =
+        runTest {
+            fixture.home.reviews = "[${FakeFrigate.MOMENT}]"
+            val viewModel = events()
+            val moment =
+                viewModel.state.value.items
+                    .single()
+
+            viewModel.toggleSelection(moment)
+            assertEquals(
+                listOf(moment),
+                viewModel.state.value.deletable,
+            )
+            viewModel.deleteSelected()
+
+            val state = viewModel.state.first { !it.isDeleting && it.items.isEmpty() }
+            assertEquals(emptySet(), state.selected)
+            assertEquals(listOf("""{"ids":["moment"]}"""), fixture.home.deletedReviews)
+        }
+
+    @Test
+    fun letsOnlyAdministratorsDelete() =
+        runTest {
+            fixture.home.reviews = "[${FakeFrigate.MOMENT}]"
+            fixture.home.users[fixture.home.username] = "viewer"
+            val viewModel = events()
+
+            viewModel.selectAll()
+            viewModel.deleteSelected()
+
+            assertEquals(emptyList(), fixture.home.deletedReviews)
+            assertEquals(
+                1,
+                viewModel.state.value.items.size,
+            )
+        }
+
+    @Test
+    fun removesTheFilesCutForSharing() =
+        runTest {
+            fixture.home.reviews = "[${FakeFrigate.MOMENT}]"
+            val viewModel = events()
+
+            viewModel.selectAll()
+            viewModel.shareSelected()
+            val ready = viewModel.state.first { it.share is SelectionShare.Ready }.share as SelectionShare.Ready
+            assertEquals(listOf("clip.mp4"), ready.files.map { it.fileName })
+            assertEquals(emptyList(), fixture.home.deletedExports)
+
+            viewModel.endSharing(shared = true)
+
+            assertEquals(
+                emptySet(),
+                viewModel.state.value.selected,
+            )
+            // The removal runs in the background, on the fake server's own thread.
+            withContext(Dispatchers.Default) {
+                withTimeout(5_000) { while (fixture.home.deletedExports.isEmpty()) delay(10) }
+            }
+            assertEquals(listOf("""{"ids":["clip"]}"""), fixture.home.deletedExports)
+        }
 
     @Test
     fun asksForTheChosenDayFromTheChosenTime() =

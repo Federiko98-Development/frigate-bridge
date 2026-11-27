@@ -7,8 +7,12 @@ import it.federicoraponi.frigatebridge.server.ServerSessionFactory
 import it.federicoraponi.frigatebridge.server.ServerStore
 import it.federicoraponi.frigatebridge.settings.DataStoreSettingsStore
 import it.federicoraponi.frigatebridge.settings.SettingsStore
+import it.federicoraponi.frigatebridge.ui.AccessViewModel
+import it.federicoraponi.frigatebridge.ui.CameraGroupEditorViewModel
+import it.federicoraponi.frigatebridge.ui.CameraGroupsViewModel
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.ChangePasswordViewModel
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
 import it.federicoraponi.frigatebridge.ui.ExportViewModel
@@ -39,6 +43,10 @@ val sharedModule =
         viewModelOf(::CamerasViewModel)
         viewModelOf(::SettingsViewModel)
         viewModelOf(::ServerStatusViewModel)
+        viewModelOf(::AccessViewModel)
+        viewModelOf(::ChangePasswordViewModel)
+        viewModelOf(::CameraGroupsViewModel)
+        viewModel { parameters -> CameraGroupEditorViewModel(parameters.get(), get(), get()) }
         viewModel { parameters -> ExportsViewModel(parameters.get(), get()) }
         viewModel { parameters -> ExportViewModel(parameters.get(), get()) }
         viewModelOf(::LockViewModel)

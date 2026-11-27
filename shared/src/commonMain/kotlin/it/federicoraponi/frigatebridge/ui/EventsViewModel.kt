@@ -14,6 +14,7 @@ import it.federicoraponi.frigatebridge.recordings.ReviewSeverity
 import it.federicoraponi.frigatebridge.recordings.momentOfDay
 import it.federicoraponi.frigatebridge.recordings.recordingDay
 import it.federicoraponi.frigatebridge.server.ConnectionState
+import it.federicoraponi.frigatebridge.server.ExportedFile
 import it.federicoraponi.frigatebridge.server.RegistryState
 import it.federicoraponi.frigatebridge.server.ServerRegistry
 import it.federicoraponi.frigatebridge.server.ServerSession
@@ -47,6 +48,30 @@ data class EventsFilter(
     val fromMinute: Int? = null,
 )
 
+/** The sharing of the chosen moments. */
+sealed interface SelectionShare {
+    data object None : SelectionShare
+
+    /** The server is cutting the video of each moment, one at a time. */
+    data class Preparing(
+        val done: Int,
+        val total: Int,
+    ) : SelectionShare
+
+    /** The videos can be downloaded. [missing] of the chosen moments have none. */
+    data class Ready(
+        val files: List<ExportedFile>,
+        val missing: Int,
+    ) : SelectionShare
+
+    data class Failed(
+        val failure: VideoFailure,
+    ) : SelectionShare
+}
+
+/** How many moments can be shared at once: each one is a video the server has to cut. */
+const val MAXIMUM_SHARED_MOMENTS = 10
+
 data class EventsState(
     val server: ServerSummary? = null,
     val servers: List<ServerSummary> = emptyList(),
@@ -72,7 +97,22 @@ data class EventsState(
     val isOffline: Boolean = false,
     /** The user is an administrator of the server. */
     val canManage: Boolean = false,
+    /** The ids of the chosen moments; while there are any, the list is being selected from. */
+    val selected: Set<String> = emptySet(),
+    val isDeleting: Boolean = false,
+    val deleteFailure: AdminFailure? = null,
+    val share: SelectionShare = SelectionShare.None,
 ) {
+    val isSelecting: Boolean get() = selected.isNotEmpty()
+
+    /**
+     * The chosen moments that can be deleted: one still going on has no end yet, and deleting recordings up to an
+     * unknown time is not something to try.
+     */
+    val deletable: List<ReviewItem> get() = items.filter { it.id in selected && it.end != null }
+
+    val canShareSelection: Boolean get() = selected.size in 1..MAXIMUM_SHARED_MOMENTS
+
     /** The day on screen, as `yyyy-mm-dd`. */
     val date: String get() = filter.date ?: today
 }
@@ -91,6 +131,11 @@ class EventsViewModel(
     val state: StateFlow<EventsState> = mutableState.asStateFlow()
     private var loadJob: Job? = null
     private val thumbnails = mutableMapOf<String, ByteArray>()
+    private var shareJob: Job? = null
+    private var shareSession: ServerSession? = null
+
+    // The files the server has cut for the sharing in progress.
+    private val sharedExports = mutableListOf<String>()
 
     init {
         viewModelScope.launch {
@@ -178,6 +223,138 @@ class EventsViewModel(
     /** Marks everything on screen as viewed. */
     fun markAllViewed() = markViewed(mutableState.value.items)
 
+    /** Adds a moment to the chosen ones, or takes it away. */
+    fun toggleSelection(item: ReviewItem) {
+        if (isActing()) return
+        mutableState.update {
+            val selected = if (item.id in it.selected) it.selected - item.id else it.selected + item.id
+            it.copy(selected = selected, deleteFailure = null)
+        }
+    }
+
+    /** Chooses every moment on screen. */
+    fun selectAll() {
+        if (isActing()) return
+        mutableState.update { it.copy(selected = it.items.map { item -> item.id }.toSet()) }
+    }
+
+    fun clearSelection() {
+        if (isActing()) return
+        mutableState.update { it.copy(selected = emptySet(), deleteFailure = null) }
+    }
+
+    fun markSelectedViewed() {
+        if (isActing()) return
+        val current = mutableState.value
+        markViewed(current.items.filter { it.id in current.selected })
+        mutableState.update { it.copy(selected = emptySet()) }
+    }
+
+    /**
+     * Deletes the chosen moments **with the recordings of their intervals**. The screen asks first. For
+     * administrators.
+     */
+    fun deleteSelected() {
+        val current = mutableState.value
+        if (!current.canManage || isActing()) return
+        val moments = current.deletable
+        if (moments.isEmpty()) return
+        val ids = moments.map { it.id }.toSet()
+        mutableState.update { it.copy(isDeleting = true, deleteFailure = null) }
+        viewModelScope.launch {
+            val session = registry.session(moments.first().serverId) ?: return@launch
+            // A list still being read would bring the deleted moments back.
+            loadJob?.cancel()
+            val failure = adminFailureOf { session.deleteReviews(ids.toList()) }
+            mutableState.update {
+                if (failure == null) {
+                    it.copy(
+                        items = it.items.filterNot { item -> item.id in ids },
+                        selected = emptySet(),
+                        isDeleting = false,
+                        isLoading = false,
+                        isRefreshing = false,
+                        isLoadingMore = false,
+                    )
+                } else {
+                    it.copy(isDeleting = false, deleteFailure = failure)
+                }
+            }
+        }
+    }
+
+    fun dismissDeleteFailure() {
+        mutableState.update { it.copy(deleteFailure = null) }
+    }
+
+    /** Has the server cut the video of each chosen moment, so that they can be handed to another app. */
+    fun shareSelected() {
+        val current = mutableState.value
+        if (!current.canShareSelection || isActing()) return
+        val moments = current.items.filter { it.id in current.selected }
+        if (moments.isEmpty()) return
+        val session = registry.session(moments.first().serverId) ?: return
+        mutableState.update { it.copy(share = SelectionShare.Preparing(0, moments.size)) }
+        shareSession = session
+        shareJob =
+            viewModelScope.launch {
+                val files = mutableListOf<ExportedFile>()
+                var failure: VideoFailure? = null
+                moments.forEachIndexed { index, moment ->
+                    val range = clipRange(moment)
+                    val result =
+                        session.cutExport(moment.camera.cameraName, range.first, range.last) { sharedExports += it }
+                    when (result) {
+                        is ExportState.Ready -> files += result.file
+                        is ExportState.Failed -> failure = result.failure
+                        else -> Unit
+                    }
+                    mutableState.update { it.copy(share = SelectionShare.Preparing(index + 1, moments.size)) }
+                }
+                val missing = moments.size - files.size
+                val outcome =
+                    if (files.isEmpty()) {
+                        SelectionShare.Failed(failure ?: VideoFailure())
+                    } else {
+                        SelectionShare.Ready(files, missing)
+                    }
+                if (files.isEmpty()) removeSharedExports()
+                mutableState.update { it.copy(share = outcome) }
+            }
+    }
+
+    /**
+     * Ends the sharing: call it when the videos have been downloaded, or to give up. The files the server cut for it
+     * are removed, so that they do not pile up there; only an administrator may do so.
+     */
+    fun endSharing(shared: Boolean) {
+        shareJob?.cancel()
+        shareJob = null
+        removeSharedExports()
+        mutableState.update {
+            it.copy(share = SelectionShare.None, selected = if (shared) emptySet() else it.selected)
+        }
+    }
+
+    private fun removeSharedExports() {
+        val session = shareSession ?: return
+        val ids = sharedExports.toList()
+        sharedExports.clear()
+        if (ids.isEmpty() || !mutableState.value.canManage) return
+        viewModelScope.launch {
+            // One at a time: Frigate removes none of a list if one of them is still being cut.
+            ids.forEach { id ->
+                try {
+                    session.deleteExport(id)
+                } catch (_: FrigateError) {
+                    // It stays on the server, where it can be deleted from the exported clips.
+                }
+            }
+        }
+    }
+
+    private fun isActing(): Boolean = mutableState.value.let { it.isDeleting || it.share != SelectionShare.None }
+
     fun switchTo(serverId: String) {
         viewModelScope.launch { registry.activate(serverId) }
     }
@@ -247,7 +424,15 @@ class EventsViewModel(
 
     private fun reload(filter: EventsFilter) {
         mutableState.update {
-            it.copy(filter = filter, items = emptyList(), isLoading = true, hasMore = false, problem = null)
+            // What is chosen belongs to the list on screen.
+            it.copy(
+                filter = filter,
+                items = emptyList(),
+                selected = emptySet(),
+                isLoading = true,
+                hasMore = false,
+                problem = null,
+            )
         }
         load(first = true)
     }
@@ -309,6 +494,8 @@ class EventsViewModel(
                             filter = state.filter.copy(group = choice?.name),
                             labels = (state.labels + page.flatMap { it.labels }).distinct().sorted(),
                             items = items,
+                            // A moment that is no longer listed is no longer chosen.
+                            selected = state.selected.filter { id -> items.any { it.id == id } }.toSet(),
                             isLoading = false,
                             isRefreshing = false,
                             isLoadingMore = false,

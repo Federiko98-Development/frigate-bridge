@@ -10,6 +10,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -20,6 +21,7 @@ import it.federicoraponi.frigatebridge.ui.LockPurpose
 import it.federicoraponi.frigatebridge.ui.LockViewModel
 import it.federicoraponi.frigatebridge.ui.SettingsViewModel
 import it.federicoraponi.frigatebridge.ui.StartViewModel
+import it.federicoraponi.frigatebridge.ui.cameras.LocalGroupButtons
 import it.federicoraponi.frigatebridge.ui.lock.LockScreen
 import it.federicoraponi.frigatebridge.ui.navigation.AppNavigation
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
@@ -69,13 +71,15 @@ class MainActivity : ComponentActivity() {
                     null -> Unit
                     true -> LockScreen(lockState.problem, onUnlock = { prompt.ask(LockPurpose.Unlock) })
                     false ->
-                        kept.SaveableStateProvider("app") {
-                            AppNavigation(
-                                viewModel = start,
-                                onAppLockChange = { enabled ->
-                                    prompt.ask(if (enabled) LockPurpose.Enable else LockPurpose.Disable)
-                                },
-                            )
+                        CompositionLocalProvider(LocalGroupButtons provides settings.groupButtons) {
+                            kept.SaveableStateProvider("app") {
+                                AppNavigation(
+                                    viewModel = start,
+                                    onAppLockChange = { enabled ->
+                                        prompt.ask(if (enabled) LockPurpose.Enable else LockPurpose.Disable)
+                                    },
+                                )
+                            }
                         }
                 }
             }

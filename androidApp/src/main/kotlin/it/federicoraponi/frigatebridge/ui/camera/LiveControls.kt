@@ -150,7 +150,7 @@ internal fun MuteButton(
         shapes = IconButtonDefaults.toggleableShapes(),
     ) {
         Icon(
-            painterResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume_on),
+            painterResource(if (muted) R.drawable.symbol_volume_off else R.drawable.symbol_volume_up),
             // The state is said apart, as on or off.
             contentDescription = stringResource(R.string.video_mute),
         )

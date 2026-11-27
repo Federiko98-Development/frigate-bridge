@@ -2,8 +2,6 @@ package it.federicoraponi.frigatebridge.ui.lock
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +15,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.designsystem.MessageState
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 
 /** Shown instead of the app until the user proves to be the phone's owner. Asks once by itself. */
@@ -36,7 +35,7 @@ fun LockScreen(
     }
     Scaffold(modifier = modifier) { innerPadding ->
         MessageState(
-            icon = Icons.Filled.Lock,
+            icon = Symbols.Lock,
             title = stringResource(R.string.lock_title),
             message = problem,
             modifier = Modifier.fillMaxSize().padding(innerPadding),

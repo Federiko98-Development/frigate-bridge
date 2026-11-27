@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -18,6 +20,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -31,12 +36,15 @@ import it.federicoraponi.frigatebridge.server.ServerStatistics
 import it.federicoraponi.frigatebridge.ui.ServerStatusState
 import it.federicoraponi.frigatebridge.ui.ServerStatusViewModel
 import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
+import it.federicoraponi.frigatebridge.ui.designsystem.ConfirmSheet
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.StatusText
+import it.federicoraponi.frigatebridge.ui.designsystem.adminFailureText
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
 import org.koin.androidx.compose.koinViewModel
@@ -50,7 +58,7 @@ fun ServerStatusRoute(
     LaunchedEffect(state.isGone) {
         if (state.isGone) onClose()
     }
-    ServerStatusScreen(state, onClose = onClose, onRefresh = viewModel::refresh)
+    ServerStatusScreen(state, onClose = onClose, onRefresh = viewModel::refresh, onRestart = viewModel::restart)
 }
 
 @Composable
@@ -58,8 +66,10 @@ fun ServerStatusScreen(
     state: ServerStatusState,
     onClose: () -> Unit,
     onRefresh: () -> Unit,
+    onRestart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var isConfirmingRestart by remember { mutableStateOf(false) }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -97,8 +107,39 @@ fun ServerStatusScreen(
                         )
                     }
                     if (statistics != null) Statistics(statistics, state)
+                    if (statistics != null || state.isRestarting) {
+                        Restart(state, onAsk = { isConfirmingRestart = true })
+                    }
                 }
             }
+        }
+    }
+    if (isConfirmingRestart) {
+        ConfirmSheet(
+            title = stringResource(R.string.restart_confirm_title),
+            message = stringResource(R.string.restart_confirm_message),
+            confirmLabel = stringResource(R.string.restart_confirm),
+            onConfirm = {
+                isConfirmingRestart = false
+                onRestart()
+            },
+            onDismiss = { isConfirmingRestart = false },
+        )
+    }
+}
+
+/** The button that restarts Frigate, or what became of asking for it. */
+@Composable
+private fun Restart(
+    state: ServerStatusState,
+    onAsk: () -> Unit,
+) {
+    state.restartFailure?.let { NoticeCard(adminFailureText(it), announce = true) }
+    if (state.isRestarting) {
+        StatusText(stringResource(R.string.restart_running), Modifier.padding(horizontal = Spacing.lg))
+    } else {
+        OutlinedButton(onClick = onAsk, shapes = ButtonDefaults.shapes(), modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.restart_button))
         }
     }
 }
@@ -253,6 +294,7 @@ private fun ServerStatusScreenPreview() {
                 ),
             onClose = {},
             onRefresh = {},
+            onRestart = {},
         )
     }
 }

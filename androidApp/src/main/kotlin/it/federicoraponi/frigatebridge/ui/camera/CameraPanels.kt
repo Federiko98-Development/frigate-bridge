@@ -16,7 +16,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.dp
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.camera.CameraFeature
 import it.federicoraponi.frigatebridge.ui.CameraControls
@@ -24,6 +27,7 @@ import it.federicoraponi.frigatebridge.ui.PtzControls
 import it.federicoraponi.frigatebridge.ui.PtzMove
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
+import it.federicoraponi.frigatebridge.ui.designsystem.ShapedIcon
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 
@@ -77,12 +81,49 @@ private val features =
         CameraFeature.Motion to R.string.feature_motion,
     )
 
+/** One switch for everything: the camera shows its live view, and nothing is recorded or detected. */
+@Composable
+private fun LiveOnlySwitch(
+    controls: CameraControls,
+    isAvailable: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    val on = controls.isLiveOnly
+    val canToggle = isAvailable && !controls.isApplying
+    val colors = MaterialTheme.colorScheme
+    SegmentedListItem(
+        checked = on,
+        onCheckedChange = onChange,
+        enabled = canToggle,
+        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+        // It stands out when it is on: the camera is keeping nothing.
+        colors =
+            ListItemDefaults.segmentedColors(
+                containerColor = colors.surfaceContainer,
+                disabledContainerColor = colors.surfaceContainer,
+                selectedContainerColor = colors.tertiaryContainer,
+                selectedContentColor = colors.onTertiaryContainer,
+                selectedSupportingContentColor = colors.onTertiaryContainer,
+            ),
+        leadingContent = { ShapedIcon(ImageVector.vectorResource(R.drawable.symbol_videocam), size = 40.dp) },
+        supportingContent = {
+            Text(stringResource(R.string.live_only_hint), style = MaterialTheme.typography.bodySmall)
+        },
+        trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = canToggle) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) { Text(stringResource(R.string.live_only_title), style = MaterialTheme.typography.titleSmall) }
+}
+
 /** The switches of a camera. */
 @Composable
 fun FeaturePanel(
     controls: CameraControls,
     onChange: (CameraFeature, Boolean) -> Unit,
+    onLiveOnly: (Boolean) -> Unit,
+    /** Off while a clip is being recorded, which turning recording off would cut. */
+    canGoLiveOnly: Boolean = true,
 ) {
+    LiveOnlySwitch(controls, canGoLiveOnly, onLiveOnly)
     val shown = features.filter { it.first in controls.available }
     ListGroup(title = stringResource(R.string.controls_title)) {
         shown.forEachIndexed { index, (feature, label) ->

@@ -28,6 +28,10 @@ sealed class FrigateError(
     class UnexpectedResponse(
         val detail: String,
         cause: Throwable? = null,
+        /** The HTTP status, when the server answered. */
+        val status: Int? = null,
+        /** Frigate's own explanation: the `message` or `detail` field of its JSON answer. */
+        val serverMessage: String? = null,
     ) : FrigateError("Unexpected response: $detail", cause)
 }
 

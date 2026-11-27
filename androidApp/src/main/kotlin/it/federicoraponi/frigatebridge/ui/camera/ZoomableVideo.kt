@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -42,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import it.federicoraponi.frigatebridge.R
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 
 private const val MAXIMUM_SCALE = 5f
 private const val DOUBLE_TAP_SCALE = 2.5f
@@ -233,7 +232,7 @@ private fun ZoomLevel(
     FilledTonalButton(onClick = onReset, shapes = ButtonDefaults.shapes(), modifier = modifier) {
         Text("%.1f×".format(locale, scale))
         Icon(
-            Icons.Filled.Close,
+            Symbols.Close,
             contentDescription = stringResource(R.string.picture_zoom_reset),
             modifier = Modifier.padding(start = Spacing.xs),
         )

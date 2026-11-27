@@ -14,6 +14,8 @@ data class CameraControls(
     val isAllowed: Boolean = false,
     /** A change is on its way to the server. */
     val isApplying: Boolean = false,
+    /** Nothing is recorded or detected: the camera only shows its live view. */
+    val isLiveOnly: Boolean = false,
     /** Why the last change failed. */
     val failure: VideoFailure? = null,
 )
@@ -48,5 +50,11 @@ internal fun Camera.controls(isAllowed: Boolean): CameraControls {
     val available = CameraFeature.entries.filterTo(mutableSetOf()) { it != CameraFeature.Recording || canRecord }
     // Detection needs motion detection: Frigate refuses to turn it off while detecting.
     val switchable = available.filterTo(mutableSetOf()) { it != CameraFeature.Motion || !isDetecting }
-    return CameraControls(enabled, available, switchable, isAllowed)
+    return CameraControls(
+        enabled = enabled,
+        available = available,
+        switchable = switchable,
+        isAllowed = isAllowed,
+        isLiveOnly = enabled.isEmpty() && !isDetectingAudio,
+    )
 }

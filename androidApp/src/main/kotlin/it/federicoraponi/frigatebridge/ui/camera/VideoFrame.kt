@@ -95,7 +95,7 @@ internal fun Failure(
 @Composable
 internal fun FullscreenButton(onClick: () -> Unit) {
     FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes()) {
-        Icon(painterResource(R.drawable.ic_fullscreen), contentDescription = null)
+        Icon(painterResource(R.drawable.symbol_fullscreen), contentDescription = null)
         Text(stringResource(R.string.video_fullscreen), modifier = Modifier.padding(start = Spacing.sm))
     }
 }

@@ -22,6 +22,10 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 - For administrators: server status, exported clips to play, download and delete, and events saved on the server
 - An optional app lock with fingerprint, face or screen lock
 - Camera groups, where each camera can be switched on or off
+- Your own password can be changed from the app
+- Hold an event to choose several: share their videos or mark them seen; administrators can also delete them with their recordings
+- One switch leaves a camera with its live view alone, without recording or detection (administrators)
+- For administrators: users, roles with the cameras each can see, camera groups (create, edit, reorder, delete) and restarting Frigate
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion
 
 ## Links to an event
@@ -89,3 +93,7 @@ English (default) and Italian. On Android 13 and later the app language can be c
 ## License
 
 [Apache 2.0](LICENSE). This is an independent project, not affiliated with Frigate.
+
+## Icons
+
+[Material Symbols](https://github.com/google/material-design-icons) by Google, under the Apache License 2.0.

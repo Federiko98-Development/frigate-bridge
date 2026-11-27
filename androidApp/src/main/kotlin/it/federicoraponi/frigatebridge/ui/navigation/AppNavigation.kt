@@ -34,6 +34,8 @@ import it.federicoraponi.frigatebridge.ui.EventTarget
 import it.federicoraponi.frigatebridge.ui.StartDestination
 import it.federicoraponi.frigatebridge.ui.StartViewModel
 import it.federicoraponi.frigatebridge.ui.VideoMode
+import it.federicoraponi.frigatebridge.ui.access.AccessRoute
+import it.federicoraponi.frigatebridge.ui.access.ChangePasswordRoute
 import it.federicoraponi.frigatebridge.ui.camera.CameraRoute
 import it.federicoraponi.frigatebridge.ui.cameras.CamerasRoute
 import it.federicoraponi.frigatebridge.ui.designsystem.LoadingContent
@@ -41,6 +43,8 @@ import it.federicoraponi.frigatebridge.ui.events.EventRoute
 import it.federicoraponi.frigatebridge.ui.events.EventsRoute
 import it.federicoraponi.frigatebridge.ui.exports.ExportRoute
 import it.federicoraponi.frigatebridge.ui.exports.ExportsRoute
+import it.federicoraponi.frigatebridge.ui.groups.CameraGroupEditRoute
+import it.federicoraponi.frigatebridge.ui.groups.CameraGroupsRoute
 import it.federicoraponi.frigatebridge.ui.server.ServerStatusRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerFormRoute
 import it.federicoraponi.frigatebridge.ui.servers.ServerListRoute
@@ -81,6 +85,22 @@ private data class EventView(
 
 @Serializable
 private data object ServerStatusPage
+
+@Serializable
+private data object AccessPage
+
+@Serializable
+private data object ChangePasswordPage
+
+@Serializable
+private data object CameraGroupsPage
+
+/** The editor of a camera group; without a [groupName] it makes a new one. */
+@Serializable
+private data class CameraGroupEdit(
+    val serverId: String,
+    val groupName: String? = null,
+)
 
 @Serializable
 private data class ExportList(
@@ -183,8 +203,11 @@ private fun AppNavHost(
         predictivePopExitTransition = { if (betweenTabs) tabExit() else popExit(LinearEasing) },
     ) {
         composable<Servers> {
+            // Opened over a server's screens, the list has somewhere to go back to.
+            val isOnTop = remember { navController.previousBackStackEntry != null }
             ServerListRoute(
-                onOpenCameras = { navController.open(Cameras) },
+                onBack = if (isOnTop) ({ navController.popBackStack<Servers>(inclusive = true) }) else null,
+                onOpenCameras = { navController.openServerCameras() },
                 onAddServer = { navController.open(ServerForm()) },
                 onEditServer = { navController.open(ServerForm(it)) },
                 onOpenSettings = { navController.open(SettingsPage) },
@@ -192,7 +215,8 @@ private fun AppNavHost(
         }
         composable<Cameras> {
             CamerasRoute(
-                onShowServers = { navController.showServers() },
+                onShowServers = { navController.open(Servers) },
+                onNoServer = { navController.showServers() },
                 onEditServer = { navController.open(ServerForm(it)) },
                 onOpenCamera = { navController.openCamera(it, recording = false) },
                 bottomBar = { tabBar(MainTab.Cameras) },
@@ -200,7 +224,8 @@ private fun AppNavHost(
         }
         composable<Events> {
             EventsRoute(
-                onShowServers = { navController.showServers() },
+                onShowServers = { navController.open(Servers) },
+                onNoServer = { navController.showServers() },
                 onOpen = { moment -> navController.open(EventView(moment.serverId, moment.id)) },
                 onOpenSaved = { navController.open(ExportList(savedOnly = true)) },
                 bottomBar = { tabBar(MainTab.Events) },
@@ -208,11 +233,14 @@ private fun AppNavHost(
         }
         composable<SettingsTab> {
             SettingsRoute(
-                onManageServers = { navController.showServers() },
+                onManageServers = { navController.open(Servers) },
                 onAppLockChange = onAppLockChange,
                 onOpenStatus = { navController.open(ServerStatusPage) },
                 onOpenExports = { navController.open(ExportList(savedOnly = false)) },
                 onOpenSaved = { navController.open(ExportList(savedOnly = true)) },
+                onOpenAccess = { navController.open(AccessPage) },
+                onChangePassword = { navController.open(ChangePasswordPage) },
+                onOpenCameraGroups = { navController.open(CameraGroupsPage) },
                 bottomBar = { tabBar(MainTab.Settings) },
             )
         }
@@ -220,6 +248,12 @@ private fun AppNavHost(
             SettingsRoute(
                 onManageServers = { navController.popBackStack<SettingsPage>(inclusive = true) },
                 onAppLockChange = onAppLockChange,
+                onOpenStatus = { navController.open(ServerStatusPage) },
+                onOpenExports = { navController.open(ExportList(savedOnly = false)) },
+                onOpenSaved = { navController.open(ExportList(savedOnly = true)) },
+                onOpenAccess = { navController.open(AccessPage) },
+                onChangePassword = { navController.open(ChangePasswordPage) },
+                onOpenCameraGroups = { navController.open(CameraGroupsPage) },
                 onBack = { navController.popBackStack<SettingsPage>(inclusive = true) },
             )
         }
@@ -234,6 +268,30 @@ private fun AppNavHost(
         }
         composable<ServerStatusPage> {
             ServerStatusRoute(onClose = { navController.popBackStack<ServerStatusPage>(inclusive = true) })
+        }
+        composable<AccessPage> {
+            AccessRoute(
+                onClose = { navController.popBackStack<AccessPage>(inclusive = true) },
+                onChangePassword = { navController.open(ChangePasswordPage) },
+            )
+        }
+        composable<ChangePasswordPage> {
+            ChangePasswordRoute(onClose = { navController.popBackStack<ChangePasswordPage>(inclusive = true) })
+        }
+        composable<CameraGroupsPage> {
+            CameraGroupsRoute(
+                onClose = { navController.popBackStack<CameraGroupsPage>(inclusive = true) },
+                onOpen = { serverId, name -> navController.open(CameraGroupEdit(serverId, name)) },
+                onAdd = { navController.open(CameraGroupEdit(it)) },
+            )
+        }
+        composable<CameraGroupEdit> { entry ->
+            val route = entry.toRoute<CameraGroupEdit>()
+            CameraGroupEditRoute(
+                serverId = route.serverId,
+                groupName = route.groupName,
+                onClose = { navController.popBackStack<CameraGroupEdit>(inclusive = true) },
+            )
         }
         composable<ExportList> { entry ->
             ExportsRoute(
@@ -313,7 +371,15 @@ private fun NavHostController.openTab(tab: MainTab) {
     }
 }
 
-/** Goes back to the server list, putting it in place of the cameras when the app opened straight on them. */
+/** The cameras of the server just chosen, with nothing of the way to the choice left above them. */
+private fun NavHostController.openServerCameras() {
+    if (!popBackStack<Cameras>(inclusive = false)) open(Cameras)
+}
+
+/**
+ * Leaves screens that have no server to show: goes to the server list, putting it in place of the cameras when the
+ * app opened straight on them. Asking for the list by hand opens it on top instead, so that back returns.
+ */
 private fun NavHostController.showServers() {
     if (!popBackStack<Servers>(inclusive = false)) {
         navigate(Servers) { popUpTo<Cameras> { inclusive = true } }

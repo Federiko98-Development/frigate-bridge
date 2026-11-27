@@ -15,40 +15,28 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecureTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldColors
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -71,22 +59,25 @@ import it.federicoraponi.frigatebridge.ui.ServerFormArgs
 import it.federicoraponi.frigatebridge.ui.ServerFormState
 import it.federicoraponi.frigatebridge.ui.ServerFormViewModel
 import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
+import it.federicoraponi.frigatebridge.ui.designsystem.FormField
+import it.federicoraponi.frigatebridge.ui.designsystem.GroupHint
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
 import it.federicoraponi.frigatebridge.ui.designsystem.LocalNetworkNotice
 import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
+import it.federicoraponi.frigatebridge.ui.designsystem.PasswordField
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.ShapedIcon
 import it.federicoraponi.frigatebridge.ui.designsystem.SheetTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.designsystem.rememberFullSheetState
 import it.federicoraponi.frigatebridge.ui.designsystem.serverColors
 import it.federicoraponi.frigatebridge.ui.rememberAllowLocalNetwork
 import it.federicoraponi.frigatebridge.ui.rememberLocalNetworkAccess
 import it.federicoraponi.frigatebridge.ui.theme.FrigateBridgeTheme
-import kotlinx.coroutines.flow.drop
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -235,7 +226,7 @@ private fun ServerFields(
                 label = R.string.form_name,
                 index = 0,
                 count = 3,
-                error = R.string.form_error_name.takeIf { FormError.NameMissing in state.errors },
+                error = errorText(R.string.form_error_name, FormError.NameMissing in state.errors),
                 keyboard =
                     KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
             )
@@ -246,7 +237,7 @@ private fun ServerFields(
                 index = 1,
                 count = 3,
                 placeholder = R.string.form_url_example,
-                error = R.string.form_error_url.takeIf { FormError.UrlInvalid in state.errors },
+                error = errorText(R.string.form_error_url, FormError.UrlInvalid in state.errors),
                 keyboard = addressKeyboard,
             )
             FormField(
@@ -255,11 +246,11 @@ private fun ServerFields(
                 label = R.string.form_alternative_url,
                 index = 2,
                 count = 3,
-                error = R.string.form_error_url.takeIf { FormError.AlternativeUrlInvalid in state.errors },
+                error = errorText(R.string.form_error_url, FormError.AlternativeUrlInvalid in state.errors),
                 keyboard = addressKeyboard,
             )
         }
-        GroupHint(R.string.form_alternative_url_hint)
+        GroupHint(stringResource(R.string.form_alternative_url_hint))
     }
 }
 
@@ -278,96 +269,26 @@ private fun LoginFields(
                 count = 2,
                 keyboard = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next),
             )
-            PasswordField(state, actions.setPassword)
+            PasswordField(
+                label = R.string.form_password,
+                index = 1,
+                count = 2,
+                onValueChange = actions.setPassword,
+                error = errorText(R.string.form_error_password, FormError.PasswordMissing in state.errors),
+                initial = state.password,
+            )
         }
-        GroupHint(if (state.isEditing) R.string.form_password_keep else R.string.form_username_hint)
+        GroupHint(
+            stringResource(if (state.isEditing) R.string.form_password_keep else R.string.form_username_hint),
+        )
     }
 }
 
-/** A line of help under a group, pulled up towards the group it explains. */
 @Composable
-private fun GroupHint(text: Int) {
-    Text(
-        stringResource(text),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = Spacing.lg),
-    )
-}
-
-@Composable
-private fun fieldShape(
-    index: Int,
-    count: Int,
-): Shape = ListItemDefaults.segmentedShapes(index = index, count = count).shape
-
-@Composable
-private fun fieldColors(): TextFieldColors {
-    val container = MaterialTheme.colorScheme.surfaceContainer
-    return TextFieldDefaults.colors(
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        unfocusedContainerColor = container,
-        errorContainerColor = MaterialTheme.colorScheme.errorContainer,
-        // The container separates the fields; no underline is needed.
-        focusedIndicatorColor = Color.Transparent,
-        unfocusedIndicatorColor = Color.Transparent,
-        disabledIndicatorColor = Color.Transparent,
-        errorIndicatorColor = Color.Transparent,
-    )
-}
-
-@Composable
-private fun FormField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: Int,
-    index: Int,
-    count: Int,
-    keyboard: KeyboardOptions,
-    placeholder: Int? = null,
-    error: Int? = null,
-) {
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(label)) },
-        placeholder = placeholder?.let { { Text(stringResource(it)) } },
-        supportingText = error?.let { { Text(stringResource(it)) } },
-        isError = error != null,
-        singleLine = true,
-        keyboardOptions = keyboard,
-        shape = fieldShape(index, count),
-        colors = fieldColors(),
-    )
-}
-
-@Composable
-private fun PasswordField(
-    state: ServerFormState,
-    onValueChange: (String) -> Unit,
-) {
-    // Not saveable on purpose: the password must not end up in the saved instance state.
-    val field = remember { TextFieldState(state.password) }
-    LaunchedEffect(field) {
-        snapshotFlow { field.text.toString() }.drop(1).collect(onValueChange)
-    }
-    val missing = FormError.PasswordMissing in state.errors
-    SecureTextField(
-        state = field,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(R.string.form_password)) },
-        supportingText =
-            if (missing) {
-                { Text(stringResource(R.string.form_error_password)) }
-            } else {
-                null
-            },
-        isError = missing,
-        shape = fieldShape(1, 2),
-        colors = fieldColors(),
-    )
-}
+private fun errorText(
+    text: Int,
+    isShown: Boolean,
+): String? = if (isShown) stringResource(text) else null
 
 /** The chosen colour turns from a circle into an Expressive shape with a check mark. */
 @Composable
@@ -408,7 +329,7 @@ private fun ColorPicker(
                             contentAlignment = Alignment.Center,
                         ) {
                             if (isSelected) {
-                                Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White)
+                                Icon(Symbols.Check, contentDescription = null, tint = Color.White)
                             }
                         }
                     }
@@ -474,7 +395,7 @@ private fun CertificateSheet(
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ShapedIcon(Icons.Filled.Lock, shape = MaterialShapes.SoftBurst)
+            ShapedIcon(Symbols.Lock, shape = MaterialShapes.SoftBurst)
             SheetTitle(stringResource(title), textAlign = TextAlign.Center)
             Text(
                 stringResource(message),

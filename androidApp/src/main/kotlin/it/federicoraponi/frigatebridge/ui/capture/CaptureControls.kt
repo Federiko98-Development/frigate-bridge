@@ -34,7 +34,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun PhotoButton(onClick: () -> Unit) {
     FilledTonalIconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
-        Icon(painterResource(R.drawable.ic_photo_camera), contentDescription = stringResource(R.string.photo_take))
+        Icon(painterResource(R.drawable.symbol_photo_camera), contentDescription = stringResource(R.string.photo_take))
     }
 }
 
@@ -62,7 +62,7 @@ fun ClipButton(
         shapes = IconButtonDefaults.toggleableShapes(),
     ) {
         Icon(
-            painterResource(if (recording) R.drawable.ic_stop else R.drawable.ic_record),
+            painterResource(if (recording) R.drawable.symbol_stop else R.drawable.symbol_fiber_manual_record),
             // The state is said apart, as on or off.
             contentDescription = stringResource(R.string.clip_start),
             tint = if (recording) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.error,

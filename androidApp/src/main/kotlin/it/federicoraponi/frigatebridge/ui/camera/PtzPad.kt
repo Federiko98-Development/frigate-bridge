@@ -59,12 +59,12 @@ fun DirectionPad(
     ) = HoldButton(icon, label, { onStart(move) }, onStop, buttonSize, container, content)
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Arrow(PtzMove.Up, R.drawable.ic_chevron_up, R.string.ptz_up)
+        Arrow(PtzMove.Up, R.drawable.symbol_keyboard_arrow_up, R.string.ptz_up)
         Row(horizontalArrangement = Arrangement.spacedBy(buttonSize)) {
-            Arrow(PtzMove.Left, R.drawable.ic_chevron_left, R.string.ptz_left)
-            Arrow(PtzMove.Right, R.drawable.ic_chevron_right, R.string.ptz_right)
+            Arrow(PtzMove.Left, R.drawable.symbol_keyboard_arrow_left, R.string.ptz_left)
+            Arrow(PtzMove.Right, R.drawable.symbol_keyboard_arrow_right, R.string.ptz_right)
         }
-        Arrow(PtzMove.Down, R.drawable.ic_chevron_down, R.string.ptz_down)
+        Arrow(PtzMove.Down, R.drawable.symbol_keyboard_arrow_down, R.string.ptz_down)
     }
 }
 
@@ -79,7 +79,7 @@ fun ZoomButtons(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         HoldButton(
-            R.drawable.ic_zoom_in,
+            R.drawable.symbol_zoom_in,
             R.string.ptz_zoom_in,
             { onStart(PtzMove.ZoomIn) },
             onStop,
@@ -88,7 +88,7 @@ fun ZoomButtons(
             content,
         )
         HoldButton(
-            R.drawable.ic_zoom_out,
+            R.drawable.symbol_zoom_out,
             R.string.ptz_zoom_out,
             { onStart(PtzMove.ZoomOut) },
             onStop,

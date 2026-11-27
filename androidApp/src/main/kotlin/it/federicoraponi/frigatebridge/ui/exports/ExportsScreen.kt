@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -43,6 +40,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.Thumbnail
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.recordings.dayAndTime
@@ -132,7 +130,7 @@ fun ExportsScreen(
                 if (state.items.isEmpty() && state.failure == null) {
                     item(key = "empty") {
                         MessageState(
-                            icon = if (state.savedOnly) Icons.Filled.Star else Icons.Filled.PlayArrow,
+                            icon = if (state.savedOnly) Symbols.Star else Symbols.PlayArrow,
                             title =
                                 stringResource(
                                     if (state.savedOnly) R.string.saved_empty else R.string.exports_empty,

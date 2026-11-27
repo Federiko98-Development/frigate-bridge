@@ -3,15 +3,19 @@ package it.federicoraponi.frigatebridge.ui.camera
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,7 +51,20 @@ fun FullscreenPlayer(
                 ExitFullscreenButton(onExit)
             }
             SnackbarHost(messages, Modifier.align(Alignment.Center))
-            PlayButton(player, Modifier.align(Alignment.BottomCenter))
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                PlayButton(player)
+                // A dark band keeps the slider and its times readable over any picture.
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = Color.Black.copy(alpha = 0.55f),
+                    contentColor = Color.White,
+                ) {
+                    VideoSeekBar(player, Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs))
+                }
+            }
         }
     }
 }
@@ -56,7 +73,7 @@ fun FullscreenPlayer(
 internal fun ExitFullscreenButton(onClick: () -> Unit) {
     FilledTonalIconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
         Icon(
-            painterResource(R.drawable.ic_fullscreen_exit),
+            painterResource(R.drawable.symbol_fullscreen_exit),
             contentDescription = stringResource(R.string.video_exit_fullscreen),
         )
     }

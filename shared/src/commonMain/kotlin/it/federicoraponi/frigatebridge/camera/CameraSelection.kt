@@ -12,6 +12,8 @@ data class CameraChoice(
 data class GroupChoice(
     val name: String?,
     val cameras: List<CameraChoice>,
+    /** The group's icon, `null` for all the cameras. */
+    val icon: String? = null,
 ) {
     val shown: List<Camera> get() = cameras.filter { it.isShown }.map { it.camera }
 
@@ -36,11 +38,12 @@ fun CameraCatalog.groupChoices(
     fun choice(
         name: String?,
         cameras: List<Camera>,
+        icon: String? = null,
     ): GroupChoice {
         val off = hidden[groupKey(serverId, name)].orEmpty()
-        return GroupChoice(name, cameras.map { CameraChoice(it, it.ref.cameraName !in off) })
+        return GroupChoice(name, cameras.map { CameraChoice(it, it.ref.cameraName !in off) }, icon)
     }
-    return listOf(choice(null, everyCamera)) + groups.map { choice(it.name, camerasIn(it.name)) }
+    return listOf(choice(null, everyCamera)) + groups.map { choice(it.name, camerasIn(it.name), it.icon) }
 }
 
 /**
@@ -58,3 +61,21 @@ fun AppSettings.showing(
     val off = names.filterNot { it in shown }.toSet()
     return copy(hiddenCameras = if (off.isEmpty()) hiddenCameras - key else hiddenCameras + (key to off))
 }
+
+/** The settings after a group of [serverId] was renamed: its switched-off cameras follow it. */
+fun AppSettings.renamingGroup(
+    serverId: String,
+    from: String,
+    to: String,
+): AppSettings {
+    val off = hiddenCameras[groupKey(serverId, from)]
+    // Whatever was saved under the new name belongs to an older group.
+    val rest = hiddenCameras - groupKey(serverId, from) - groupKey(serverId, to)
+    return copy(hiddenCameras = if (off == null) rest else rest + (groupKey(serverId, to) to off))
+}
+
+/** The settings after a group of [serverId] was deleted. */
+fun AppSettings.forgettingGroup(
+    serverId: String,
+    name: String,
+): AppSettings = copy(hiddenCameras = hiddenCameras - groupKey(serverId, name))

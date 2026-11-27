@@ -1,8 +1,5 @@
 package it.federicoraponi.frigatebridge.ui.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
@@ -11,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import it.federicoraponi.frigatebridge.R
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 
 /** The screens of the bottom bar. They all show the active server. */
 enum class MainTab {
@@ -40,9 +38,9 @@ fun MainTabBar(
                 // The label under the icon names the tab.
                 icon = {
                     when (tab) {
-                        MainTab.Cameras -> Icon(painterResource(R.drawable.ic_videocam), contentDescription = null)
-                        MainTab.Events -> Icon(Icons.Filled.Notifications, contentDescription = null)
-                        MainTab.Settings -> Icon(Icons.Filled.Settings, contentDescription = null)
+                        MainTab.Cameras -> Icon(painterResource(R.drawable.symbol_videocam), contentDescription = null)
+                        MainTab.Events -> Icon(Symbols.Notifications, contentDescription = null)
+                        MainTab.Settings -> Icon(Symbols.Settings, contentDescription = null)
                     }
                 },
                 label = { Text(label) },

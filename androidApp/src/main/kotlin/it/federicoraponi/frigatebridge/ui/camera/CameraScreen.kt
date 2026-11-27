@@ -150,6 +150,7 @@ fun CameraRoute(
             stopMoving = viewModel::stopMoving,
             goToPreset = viewModel::goToPreset,
             setFeature = viewModel::setFeature,
+            setLiveOnly = viewModel::setLiveOnly,
         )
     if (fullscreen) {
         BackHandler { fullscreen = false }
@@ -163,7 +164,12 @@ fun CameraRoute(
             onExit = { fullscreen = false },
             recordings = {
                 if (timeline != null && recordings != null) {
-                    FullscreenTimeline(recordings, player, onSeek = timeline::seekTo)
+                    FullscreenTimeline(
+                        state = recordings,
+                        player = player,
+                        onSeek = timeline::seekTo,
+                        onScrubbed = timeline::playerAt,
+                    )
                 }
             },
         ) { video(content) }
@@ -187,6 +193,8 @@ fun CameraRoute(
                         actions =
                             RecordingsActions(
                                 selectDay = timeline::selectDay,
+                                // The timeline follows, also while the video is paused.
+                                scrubbed = timeline::playerAt,
                                 seekTo = timeline::seekTo,
                                 skip = timeline::skip,
                                 export = timeline::export,
@@ -219,6 +227,7 @@ data class CameraActions(
     val stopMoving: () -> Unit = {},
     val goToPreset: (String) -> Unit = {},
     val setFeature: (CameraFeature, Boolean) -> Unit = { _, _ -> },
+    val setLiveOnly: (Boolean) -> Unit = {},
 )
 
 /** The upright page of a camera: the video with what can be done with it underneath. */
@@ -279,7 +288,12 @@ fun CameraScreen(
             }
             // Only administrators may change camera settings, and they do not belong with the recordings.
             if (state.mode == VideoMode.Live && state.controls.isAllowed && state.streams.isNotEmpty()) {
-                FeaturePanel(state.controls, actions.setFeature)
+                FeaturePanel(
+                    controls = state.controls,
+                    onChange = actions.setFeature,
+                    onLiveOnly = actions.setLiveOnly,
+                    canGoLiveOnly = state.clip != ClipState.Starting && state.clip !is ClipState.Recording,
+                )
             }
         }
     }

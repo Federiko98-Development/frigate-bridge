@@ -11,14 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -50,6 +42,7 @@ import it.federicoraponi.frigatebridge.ui.ServerListItem
 import it.federicoraponi.frigatebridge.ui.ServerListState
 import it.federicoraponi.frigatebridge.ui.ServerListViewModel
 import it.federicoraponi.frigatebridge.ui.ServerStatus
+import it.federicoraponi.frigatebridge.ui.designsystem.BackButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ConfirmSheet
 import it.federicoraponi.frigatebridge.ui.designsystem.ExpressiveMenu
 import it.federicoraponi.frigatebridge.ui.designsystem.ListGroup
@@ -62,6 +55,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.problemText
 import it.federicoraponi.frigatebridge.ui.rememberAllowLocalNetwork
 import it.federicoraponi.frigatebridge.ui.rememberLocalNetworkAccess
@@ -77,6 +71,8 @@ data class ServerListActions(
     val refresh: () -> Unit = {},
     val allowLocalNetwork: () -> Unit = {},
     val openSettings: () -> Unit = {},
+    /** Set when the list was opened over another screen. */
+    val back: (() -> Unit)? = null,
 )
 
 @Composable
@@ -85,6 +81,7 @@ fun ServerListRoute(
     onAddServer: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: ServerListViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -106,6 +103,7 @@ fun ServerListRoute(
                 refresh = viewModel::refresh,
                 allowLocalNetwork = allowLocalNetwork,
                 openSettings = onOpenSettings,
+                back = onBack,
             ),
     )
 }
@@ -127,9 +125,10 @@ fun ServerListScreen(
         topBar = {
             TopAppBar(
                 title = { ScreenTitle(stringResource(R.string.servers_title)) },
+                navigationIcon = { actions.back?.let { BackButton(it) } },
                 actions = {
                     IconButton(onClick = actions.openSettings, shapes = IconButtonDefaults.shapes()) {
-                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
+                        Icon(Symbols.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -149,14 +148,14 @@ fun ServerListScreen(
                 state.isLoading -> LoadingContent()
                 state.servers.isEmpty() ->
                     MessageState(
-                        icon = Icons.Filled.Home,
+                        icon = Symbols.Home,
                         title = stringResource(R.string.servers_empty_title),
                         message = stringResource(R.string.servers_empty_message),
                     ) {
                         PrimaryButton(
                             text = stringResource(R.string.server_add),
                             onClick = actions.add,
-                            leading = { Icon(Icons.Filled.Add, contentDescription = null) },
+                            leading = { Icon(Symbols.Add, contentDescription = null) },
                         )
                     }
                 else ->
@@ -187,7 +186,7 @@ private fun AddServerButton(onClick: () -> Unit) {
     SmallExtendedFloatingActionButton(
         onClick = onClick,
         // The button hides its text from accessibility services, so the icon carries the label.
-        icon = { Icon(Icons.Filled.Add, contentDescription = label) },
+        icon = { Icon(Symbols.Add, contentDescription = label) },
         text = { Text(label) },
     )
 }
@@ -262,7 +261,7 @@ private fun DefaultServerCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
-                    Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Symbols.Star, contentDescription = null, modifier = Modifier.size(14.dp))
                     Text(stringResource(R.string.server_default), style = MaterialTheme.typography.labelMedium)
                 }
                 Text(server.name, style = MaterialTheme.typography.titleLargeEmphasized)
@@ -341,7 +340,7 @@ private fun ServerMenu(
     Box {
         IconButton(onClick = { open = true }, shapes = IconButtonDefaults.shapes()) {
             Icon(
-                Icons.Filled.MoreVert,
+                Symbols.MoreVert,
                 contentDescription = stringResource(R.string.server_options, server.name),
             )
         }
@@ -353,17 +352,17 @@ private fun ServerMenu(
                     MenuEntry(
                         label = stringResource(R.string.edit),
                         onClick = { actions.edit(server.id) },
-                        leading = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                        leading = { Icon(Symbols.Edit, contentDescription = null) },
                     ),
                     MenuEntry(
                         label = stringResource(defaultLabel),
                         onClick = { actions.toggleDefault(server.id) },
-                        leading = { Icon(Icons.Filled.Star, contentDescription = null) },
+                        leading = { Icon(Symbols.Star, contentDescription = null) },
                     ),
                     MenuEntry(
                         label = stringResource(R.string.remove),
                         onClick = { onRemove(server.id) },
-                        leading = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                        leading = { Icon(Symbols.Delete, contentDescription = null) },
                     ),
                 ),
         )

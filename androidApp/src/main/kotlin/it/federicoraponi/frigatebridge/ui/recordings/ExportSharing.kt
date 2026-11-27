@@ -1,5 +1,6 @@
 package it.federicoraponi.frigatebridge.ui.recordings
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +52,29 @@ private suspend fun Context.downloadAndShare(
     startActivity(Intent.createChooser(send, null))
 }
 
+/** Downloads several exports into the cache and offers them together to other apps. */
+private suspend fun Context.downloadAndShareAll(downloads: List<Pair<String, ExportDownload>>) {
+    val uris =
+        withContext(Dispatchers.IO) {
+            downloads.map { (name, download) ->
+                val file =
+                    newSharedFile("exports", name) { output ->
+                        download.into { bytes, count -> output.write(bytes, 0, count) }
+                    }
+                FileProvider.getUriForFile(this@downloadAndShareAll, "$packageName.files", file)
+            }
+        }
+    val send =
+        Intent(Intent.ACTION_SEND_MULTIPLE)
+            .setType("video/mp4")
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    // The permission to read reaches every file only through the clip data.
+    send.clipData =
+        ClipData.newRawUri(null, uris.first()).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
+    startActivity(Intent.createChooser(send, null))
+}
+
 /** Downloads exports to hand them to other apps, and tells how it is going. */
 @Stable
 class ExportSharing(
@@ -74,6 +98,30 @@ class ExportSharing(
         whileBusy {
             try {
                 context.downloadAndShare(export.fileName, download)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                failure = error.message ?: error.javaClass.simpleName
+            }
+        }
+    }
+
+    /** Hands several files over together, then calls [onShared]. */
+    fun shareAll(
+        exports: List<ExportedFile>,
+        onShared: () -> Unit,
+    ) {
+        failure = null
+        val prepared = exports.map { it.fileName to downloads.prepare(it) }
+        whileBusy {
+            try {
+                val only = prepared.singleOrNull()
+                if (only != null) {
+                    context.downloadAndShare(only.first, only.second)
+                } else {
+                    context.downloadAndShareAll(prepared)
+                }
+                onShared()
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {

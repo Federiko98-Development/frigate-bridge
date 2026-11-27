@@ -165,8 +165,12 @@ internal fun FullscreenTimeline(
     state: TimelineState,
     player: Player?,
     onSeek: (Long) -> Unit,
+    onScrubbed: (Long) -> Unit,
 ) {
     val day = state.day ?: return
+    if (state.ranges.isNotEmpty()) {
+        VideoSeekBar(player, Modifier.padding(horizontal = Spacing.lg), onSeeked = onScrubbed)
+    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.lg).padding(bottom = Spacing.lg),
         verticalAlignment = Alignment.CenterVertically,

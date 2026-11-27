@@ -14,6 +14,7 @@ class ServerSessionFactory(
             http = clients.create(server.certificateSha256),
             credentials = { secrets.read(passwordKey(server.id))?.let { Credentials(server.username, it) } },
             tokens = SecretTokenStore(secrets, server.id),
+            storePassword = { secrets.write(passwordKey(server.id), it) },
         )
 
     /** A throwaway session to check a server before saving it. Nothing is stored. */

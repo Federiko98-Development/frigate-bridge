@@ -19,6 +19,39 @@ import kotlinx.serialization.json.JsonTransformingSerializer
 data class ConfigDto(
     val cameras: Map<String, CameraConfigDto> = emptyMap(),
     @SerialName("camera_groups") val cameraGroups: Map<String, CameraGroupDto> = emptyMap(),
+    val auth: AuthConfigDto = AuthConfigDto(),
+    val birdseye: BirdseyeConfigDto = BirdseyeConfigDto(),
+)
+
+@Serializable
+data class AuthConfigDto(
+    val enabled: Boolean = true,
+    /** Includes `admin` and `viewer`, which Frigate always adds with an empty list. */
+    val roles: Map<
+        String,
+        @Serializable(with = CameraListSerializer::class)
+        List<String>,
+    > = emptyMap(),
+)
+
+/** The view that combines all cameras, which can be a member of a camera group. */
+@Serializable
+data class BirdseyeConfigDto(
+    val enabled: Boolean = true,
+)
+
+/** A user of the server. */
+@Serializable
+data class UserDto(
+    val username: String,
+    val role: String = "viewer",
+)
+
+/** Frigate's `{"success": ..., "message": ...}` answer. */
+@Serializable
+data class ResultDto(
+    val success: Boolean = true,
+    val message: String = "",
 )
 
 @Serializable
@@ -31,6 +64,7 @@ data class CameraConfigDto(
     val detect: FeatureDto = FeatureDto(),
     val motion: FeatureDto = FeatureDto(),
     val snapshots: FeatureDto = FeatureDto(),
+    val audio: FeatureDto = FeatureDto(),
     val onvif: OnvifDto = OnvifDto(),
 )
 

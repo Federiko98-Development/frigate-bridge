@@ -73,7 +73,7 @@ fun CameraCard(
                     contentColor = if (camera.enabled) colors.onPrimaryContainer else colors.onSurfaceVariant,
                 ) {
                     Icon(
-                        painterResource(R.drawable.ic_videocam),
+                        painterResource(R.drawable.symbol_videocam),
                         contentDescription = null,
                         modifier = Modifier.padding(Spacing.sm).size(20.dp),
                     )
@@ -108,7 +108,7 @@ fun CameraCard(
                 } else {
                     if (camera.isDetecting) {
                         Icon(
-                            painterResource(R.drawable.ic_detect),
+                            painterResource(R.drawable.symbol_visibility),
                             contentDescription = stringResource(R.string.camera_detecting),
                             tint = Color.White,
                             modifier = Modifier.size(16.dp),
@@ -116,7 +116,7 @@ fun CameraCard(
                     }
                     if (camera.isRecording) {
                         Icon(
-                            painterResource(R.drawable.ic_record),
+                            painterResource(R.drawable.symbol_fiber_manual_record),
                             contentDescription = stringResource(R.string.camera_recording),
                             tint = RecordingColor,
                             modifier = Modifier.size(16.dp),

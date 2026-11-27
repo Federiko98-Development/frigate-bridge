@@ -46,6 +46,10 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Screens that read a server refresh by dragging down (`RefreshableContent`); there is no refresh button.
 - Controls depend on the camera: hide what it cannot do (no audio, no recording in the configuration, no PTZ
   feature, not an administrator) instead of disabling it. The app is portrait except for full screen video.
+- Icons are Material Symbols, rounded and filled, kept as `res/drawable/symbol_<name>.xml` (from
+  `google/material-design-icons`, without the `android:tint` line) and listed in `ui/designsystem/Symbols.kt`.
+  No `material-icons` library. A group icon also needs a Lucide name, which Frigate's web interface draws.
+- The default colours are the app's blue (`ui/theme/Color.kt`); dynamic colour is a setting, off by default.
 - Compact sizes: standard top app bars, default or small buttons and FAB, titles no larger than `titleLarge`.
   Medium and large variants looked oversized on a real phone (384dp wide).
 - Every `NavHost` sets all transitions, including `predictivePopEnterTransition` and
@@ -74,6 +78,19 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   keep its recordings: they expire with the review retention days. To keep a moment the app marks its objects
   and makes an export named `… #saved-<reviewId>`, which stays until deleted.
 - Server pages (statistics, exports, kept moments) are offered to administrators only.
+- Users (`/api/users`) change at once, and the proxy caches the list like `/api/config`. A name already taken
+  answers 500, so the app checks first. A wrong `old_password` is a 401 with a JSON `message`, unlike the HTML 401
+  of a refused token. Changing one's own password returns a new cookie; older Bearer tokens stay valid until they
+  expire, keeping their role.
+- Roles and camera groups are written with `PUT /api/config/set` and a `config_data` body, and apply without a
+  restart. Frigate can report success without saving, so the app reads the configuration again.
+- `POST /api/reviews/delete` (administrators) also deletes the camera's recordings overlapping each item, for good:
+  confirm first, and never send a moment without an end. Never try it on a real server.
+- Sharing events makes one export each (viewers may export); the app removes them after downloading, which only
+  an administrator may do.
+- "Live view only" switches recordings, snapshots, detect, motion (after detect) and audio off, and remembers what
+  was on in `AppSettings.liveOnlyRestore`.
+- `POST /api/restart` stops the process: in Docker the container comes back only with a restart policy.
 
 ## Android platform notes
 

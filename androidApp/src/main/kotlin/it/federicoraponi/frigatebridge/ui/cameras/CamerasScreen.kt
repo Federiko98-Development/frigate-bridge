@@ -10,12 +10,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -64,6 +58,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.RefreshableContent
 import it.federicoraponi.frigatebridge.ui.designsystem.ServerBadge
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.unavailableText
 import it.federicoraponi.frigatebridge.ui.rememberAllowLocalNetwork
 import it.federicoraponi.frigatebridge.ui.rememberLocalNetworkAccess
@@ -86,6 +81,7 @@ data class CamerasActions(
 @Composable
 fun CamerasRoute(
     onShowServers: () -> Unit,
+    onNoServer: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenCamera: (CameraRef) -> Unit,
     bottomBar: @Composable () -> Unit = {},
@@ -96,7 +92,7 @@ fun CamerasRoute(
     val allowLocalNetwork = rememberAllowLocalNetwork(localNetwork, onAllowed = viewModel::retry)
     // The server on screen was deleted, or the system restarted the app and no server is active.
     LaunchedEffect(state.content) {
-        if (state.content == CamerasContent.NoServer) onShowServers()
+        if (state.content == CamerasContent.NoServer) onNoServer()
     }
     val context = LocalContext.current
     val settings = state.settings
@@ -171,7 +167,7 @@ fun CamerasScreen(
                     CamerasContent.Loading, CamerasContent.NoServer -> LoadingContent()
                     is CamerasContent.Failed ->
                         MessageState(
-                            icon = Icons.Filled.Warning,
+                            icon = Symbols.Warning,
                             title = unavailableText(content.problem, state.isOffline),
                             message = if (state.isOffline) stringResource(R.string.offline_message) else null,
                             isError = true,
@@ -199,12 +195,12 @@ private fun LayoutButton(
     IconButton(onClick = onToggle, shapes = IconButtonDefaults.shapes()) {
         if (layout == HomeLayout.Grid) {
             Icon(
-                Icons.AutoMirrored.Filled.List,
+                Symbols.ViewList,
                 contentDescription = stringResource(R.string.cameras_show_list),
             )
         } else {
             Icon(
-                painterResource(R.drawable.ic_grid_view),
+                painterResource(R.drawable.symbol_grid_view),
                 contentDescription = stringResource(R.string.cameras_show_grid),
             )
         }
@@ -237,7 +233,7 @@ internal fun ServerSwitcher(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = Spacing.sm).weight(1f, fill = false),
             )
-            Icon(Icons.Filled.ArrowDropDown, contentDescription = switchLabel)
+            Icon(Symbols.ArrowDropDown, contentDescription = switchLabel)
         }
         ExpressiveMenu(
             expanded = open,
@@ -253,7 +249,7 @@ internal fun ServerSwitcher(
                             if (current) {
                                 {
                                     Icon(
-                                        Icons.Filled.Check,
+                                        Symbols.Check,
                                         contentDescription = stringResource(R.string.server_selected),
                                     )
                                 }
@@ -265,7 +261,7 @@ internal fun ServerSwitcher(
                     MenuEntry(
                         label = stringResource(R.string.cameras_all_servers),
                         onClick = onShowServers,
-                        leading = { Icon(Icons.Filled.Home, contentDescription = null) },
+                        leading = { Icon(Symbols.Home, contentDescription = null) },
                     ),
         )
     }
@@ -279,7 +275,7 @@ private fun CameraGrid(
     previews: CameraPreviews,
 ) {
     if (content.cameras.isEmpty()) {
-        MessageState(icon = Icons.Filled.Home, title = stringResource(R.string.cameras_empty))
+        MessageState(icon = Symbols.Home, title = stringResource(R.string.cameras_empty))
         return
     }
     LazyVerticalGrid(

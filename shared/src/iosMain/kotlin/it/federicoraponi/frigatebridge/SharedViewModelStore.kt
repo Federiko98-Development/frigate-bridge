@@ -7,9 +7,14 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import it.federicoraponi.frigatebridge.camera.CameraRef
+import it.federicoraponi.frigatebridge.ui.AccessViewModel
 import it.federicoraponi.frigatebridge.ui.CameraArgs
+import it.federicoraponi.frigatebridge.ui.CameraGroupEditorArgs
+import it.federicoraponi.frigatebridge.ui.CameraGroupEditorViewModel
+import it.federicoraponi.frigatebridge.ui.CameraGroupsViewModel
 import it.federicoraponi.frigatebridge.ui.CameraViewModel
 import it.federicoraponi.frigatebridge.ui.CamerasViewModel
+import it.federicoraponi.frigatebridge.ui.ChangePasswordViewModel
 import it.federicoraponi.frigatebridge.ui.EventArgs
 import it.federicoraponi.frigatebridge.ui.EventViewModel
 import it.federicoraponi.frigatebridge.ui.EventsViewModel
@@ -77,6 +82,18 @@ class SharedViewModelStore : ViewModelStoreOwner {
         serverId: String,
         exportId: String,
     ): ExportViewModel = resolve { KoinPlatform.getKoin().get { parametersOf(ExportArgs(serverId, exportId)) } }
+
+    fun accessViewModel(): AccessViewModel = resolve { KoinPlatform.getKoin().get() }
+
+    fun changePasswordViewModel(): ChangePasswordViewModel = resolve { KoinPlatform.getKoin().get() }
+
+    fun cameraGroupsViewModel(): CameraGroupsViewModel = resolve { KoinPlatform.getKoin().get() }
+
+    fun cameraGroupEditorViewModel(
+        serverId: String,
+        groupName: String?,
+    ): CameraGroupEditorViewModel =
+        resolve { KoinPlatform.getKoin().get { parametersOf(CameraGroupEditorArgs(serverId, groupName)) } }
 
     fun clear() {
         viewModelStore.clear()

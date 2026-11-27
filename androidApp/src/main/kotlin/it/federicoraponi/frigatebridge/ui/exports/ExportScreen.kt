@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -56,6 +53,7 @@ import it.federicoraponi.frigatebridge.ui.camera.LandscapeFullscreen
 import it.federicoraponi.frigatebridge.ui.camera.RecordingPicture
 import it.federicoraponi.frigatebridge.ui.camera.RecordingTransport
 import it.federicoraponi.frigatebridge.ui.camera.VideoFrame
+import it.federicoraponi.frigatebridge.ui.camera.VideoSeekBar
 import it.federicoraponi.frigatebridge.ui.camera.ZoomableVideo
 import it.federicoraponi.frigatebridge.ui.camera.rememberRecordingPlayer
 import it.federicoraponi.frigatebridge.ui.camera.seekBy
@@ -69,6 +67,7 @@ import it.federicoraponi.frigatebridge.ui.designsystem.NoticeCard
 import it.federicoraponi.frigatebridge.ui.designsystem.PrimaryButton
 import it.federicoraponi.frigatebridge.ui.designsystem.ScreenTitle
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import it.federicoraponi.frigatebridge.ui.designsystem.failureText
 import it.federicoraponi.frigatebridge.ui.recordings.DownloadProgress
 import it.federicoraponi.frigatebridge.ui.recordings.SharingFailure
@@ -194,6 +193,7 @@ fun ExportScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             VideoFrame(video)
+            VideoSeekBar(player)
             RecordingTransport(player, onSkip = { player?.seekBy(it) })
             actions.takePhoto?.let { PhotoButton(it) }
             FullscreenButton(actions.fullscreen)
@@ -215,7 +215,7 @@ fun ExportScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     FilledTonalButton(onClick = { actions.share(file) }, shapes = ButtonDefaults.shapes()) {
-                        Icon(Icons.Filled.Share, contentDescription = null)
+                        Icon(Symbols.Share, contentDescription = null)
                         Text(stringResource(R.string.export_share), modifier = Modifier.padding(start = Spacing.sm))
                     }
                 }
@@ -228,7 +228,7 @@ fun ExportScreen(
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     shapes = ButtonDefaults.shapes(),
                 ) {
-                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Icon(Symbols.Delete, contentDescription = null)
                     Text(stringResource(R.string.export_delete), modifier = Modifier.padding(start = Spacing.sm))
                 }
             }

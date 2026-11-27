@@ -114,6 +114,84 @@ class CameraViewModel(
         }
     }
 
+    /**
+     * Leaves the camera with its live view alone ([on]): nothing is recorded and nothing detected. Switched back
+     * off, what was on before comes back. Like every switch, it lasts until Frigate restarts.
+     */
+    fun setLiveOnly(on: Boolean) {
+        val controls = mutableState.value.controls
+        val clip = mutableState.value.clip
+        // Turning recording off would cut a clip being recorded.
+        if (!controls.isAllowed || controls.isApplying) return
+        if (clip == ClipState.Starting || clip is ClipState.Recording) return
+        mutableState.update { it.copy(controls = controls.copy(isLiveOnly = on, isApplying = true, failure = null)) }
+        viewModelScope.launch {
+            val session = session() ?: return@launch
+            val key = "${camera.serverId}/${camera.cameraName}"
+            var failure: VideoFailure? = null
+            try {
+                val current = cameraIn(session)
+                if (current != null) {
+                    if (on) {
+                        // Detection goes before motion: Frigate keeps motion on while it detects.
+                        val running =
+                            listOfNotNull(
+                                RECORDING.takeIf { current.isRecording },
+                                SNAPSHOTS.takeIf { current.isSavingSnapshots },
+                                DETECTION.takeIf { current.isDetecting },
+                                MOTION.takeIf { current.isDetectingMotion },
+                                AUDIO.takeIf { current.isDetectingAudio },
+                            )
+                        // Saved first: a failure half way must not lose what to switch back on.
+                        if (running.isNotEmpty()) {
+                            settings.update {
+                                it.copy(liveOnlyRestore = it.liveOnlyRestore + (key to running.toSet()))
+                            }
+                        }
+                        session.setCameraFeatures(camera.cameraName, running.map { it to false })
+                    } else {
+                        // Without a note of what was on, e.g. switched off elsewhere, the usual functions come back.
+                        val before =
+                            settings.settings.first().liveOnlyRestore[key] ?: setOf(MOTION, DETECTION, RECORDING)
+                        val wanted =
+                            listOf(MOTION, DETECTION, RECORDING, SNAPSHOTS, AUDIO)
+                                .filter { it in before && (it != RECORDING || current.canRecord) }
+                        session.setCameraFeatures(camera.cameraName, wanted.map { it to true })
+                        settings.update { it.copy(liveOnlyRestore = it.liveOnlyRestore - key) }
+                    }
+                }
+            } catch (error: FrigateError) {
+                failure = error.toVideoFailure()
+            }
+            showControls(session, failure, fallback = controls)
+        }
+    }
+
+    private fun cameraIn(session: ServerSession) =
+        (session.state.value as? ConnectionState.Connected)
+            ?.snapshot
+            ?.catalog
+            ?.cameras
+            ?.firstOrNull { it.ref == camera }
+
+    /** Shows the switches as the server has them after a change. */
+    private fun showControls(
+        session: ServerSession,
+        failure: VideoFailure?,
+        fallback: CameraControls,
+    ) {
+        val isAllowed =
+            (session.state.value as? ConnectionState.Connected)?.snapshot?.catalog?.canChangeSettings == true
+        val current = cameraIn(session)
+        mutableState.update {
+            val shown = current?.controls(isAllowed) ?: fallback
+            it.copy(
+                controls = shown.copy(isApplying = false, failure = failure),
+                canRecordClip = shown.isAllowed && it.canRecord && current?.isRecording == true,
+            )
+        }
+    }
+
     /** Starts moving the camera; it keeps going until [stopMoving]. */
     fun startMoving(move: PtzMove) {
         ptzUsed = true
@@ -461,3 +539,10 @@ class CameraViewModel(
 }
 
 private const val STOP = "STOP"
+
+// Frigate's names of the functions switched for the live view alone.
+private val DETECTION = CameraFeature.Detection.apiName
+private val RECORDING = CameraFeature.Recording.apiName
+private val SNAPSHOTS = CameraFeature.Snapshots.apiName
+private val MOTION = CameraFeature.Motion.apiName
+private const val AUDIO = "audio"

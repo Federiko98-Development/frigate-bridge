@@ -1,21 +1,27 @@
 package it.federicoraponi.frigatebridge.ui.camera
 
+import android.text.format.DateUtils
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -28,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.media3.common.MediaItem
@@ -45,6 +52,7 @@ import it.federicoraponi.frigatebridge.server.acceptingCertificate
 import it.federicoraponi.frigatebridge.ui.SeekRequest
 import it.federicoraponi.frigatebridge.ui.capture.ProvidesPlayerFrames
 import it.federicoraponi.frigatebridge.ui.designsystem.Spacing
+import it.federicoraponi.frigatebridge.ui.designsystem.Symbols
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 
@@ -158,12 +166,69 @@ fun PlayButton(
         modifier = modifier.size(56.dp),
     ) {
         if (playing) {
-            Icon(painterResource(R.drawable.ic_pause), stringResource(R.string.video_pause))
+            Icon(painterResource(R.drawable.symbol_pause), stringResource(R.string.video_pause))
         } else {
-            Icon(Icons.Filled.PlayArrow, stringResource(R.string.video_play))
+            Icon(Symbols.PlayArrow, stringResource(R.string.video_play))
         }
     }
 }
+
+/**
+ * Where the video is, to drag back and forth in it. The picture moves when the finger is lifted: seeking all the way
+ * through a drag would have the recordings downloaded over and over. [onSeeked] gets the position asked for.
+ */
+@Composable
+fun VideoSeekBar(
+    player: Player?,
+    modifier: Modifier = Modifier,
+    onSeeked: (Long) -> Unit = {},
+) {
+    var position by remember(player) { mutableLongStateOf(0) }
+    var duration by remember(player) { mutableLongStateOf(0) }
+    var dragged by remember(player) { mutableStateOf<Float?>(null) }
+    LaunchedEffect(player) {
+        while (player != null) {
+            // The length is not known until the video has started to load.
+            duration = player.duration.coerceAtLeast(0)
+            position = player.currentPosition.coerceIn(0, duration)
+            delay(POSITION_INTERVAL_MILLIS / 2)
+        }
+    }
+    val fraction = dragged ?: if (duration > 0) position.toFloat() / duration else 0f
+    val shown = (fraction * duration).toLong()
+    val description = stringResource(R.string.video_position)
+    val spoken = stringResource(R.string.video_position_of, videoTime(shown), videoTime(duration))
+    Column(modifier = modifier.fillMaxWidth()) {
+        Slider(
+            value = fraction,
+            onValueChange = { dragged = it },
+            onValueChangeFinished = {
+                val chosen = dragged
+                if (player != null && chosen != null) {
+                    val target = (chosen * duration).toLong()
+                    player.seekTo(target)
+                    position = target
+                    onSeeked(target)
+                }
+                dragged = null
+            },
+            enabled = player != null && duration > 0,
+            modifier =
+                Modifier.semantics {
+                    contentDescription = description
+                    stateDescription = spoken
+                },
+        )
+        Row(modifier = Modifier.fillMaxWidth().clearAndSetSemantics {}) {
+            Text(videoTime(shown), style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.weight(1f))
+            Text(videoTime(duration), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/** A length of video, as `m:ss`, or `h:mm:ss` from an hour on. */
+private fun videoTime(millis: Long): String = DateUtils.formatElapsedTime(millis / 1_000)
 
 /** Play and pause with jumps of ten seconds and a minute. With large fonts the jumps wrap to another line. */
 @Composable
