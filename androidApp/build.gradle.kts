@@ -54,14 +54,14 @@ val releaseKey =
     }
 
 android {
-    namespace = "it.federicoraponi.frigatebridge"
+    namespace = "it.federicoraponi.watchdeck"
     compileSdk =
         libs.versions.android.compileSdk
             .get()
             .toInt()
 
     defaultConfig {
-        applicationId = "it.federicoraponi.frigatebridge"
+        applicationId = "it.federicoraponi.watchdeck"
         minSdk =
             libs.versions.android.minSdk
                 .get()

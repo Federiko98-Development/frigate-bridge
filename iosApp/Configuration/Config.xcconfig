@@ -1,7 +1,7 @@
 TEAM_ID=
 
-PRODUCT_NAME=FrigateBridge
-PRODUCT_BUNDLE_IDENTIFIER=it.federicoraponi.frigatebridge.FrigateBridge$(TEAM_ID)
+PRODUCT_NAME=Watchdeck
+PRODUCT_BUNDLE_IDENTIFIER=it.federicoraponi.watchdeck.Watchdeck$(TEAM_ID)
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0

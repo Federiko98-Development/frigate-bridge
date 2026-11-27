@@ -21,7 +21,7 @@ kotlin {
         }
     }
     android {
-        namespace = "it.federicoraponi.frigatebridge.shared"
+        namespace = "it.federicoraponi.watchdeck.shared"
         compileSdk =
             libs.versions.android.compileSdk
                 .get()

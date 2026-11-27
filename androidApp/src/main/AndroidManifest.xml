@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <application
-        android:name=".FrigateBridgeApplication"
+        android:name=".WatchdeckApplication"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -18,7 +18,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FrigateBridge">
+        android:theme="@style/Theme.Watchdeck">
         <activity
             android:exported="true"
             android:name=".MainActivity"
@@ -39,7 +39,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:scheme="frigatebridge"
+                    android:scheme="watchdeck"
                     android:host="event" />
             </intent-filter>
         </activity>

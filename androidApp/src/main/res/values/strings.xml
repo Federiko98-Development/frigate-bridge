@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">Frigate Bridge</string>
+    <string name="app_name" translatable="false">Watchdeck</string>
     <string name="servers_title">Servers</string>
     <string name="servers_empty_title">No servers yet</string>
     <string name="servers_empty_message">Add your Frigate server to see its cameras.</string>
@@ -196,9 +196,9 @@
     <string name="events_from">from %1$s</string>
     <string name="events_today_again">Back to today</string>
     <string name="events_mark_all_short">Mark all seen</string>
-    <string name="lock_title">Frigate Bridge is locked</string>
+    <string name="lock_title">Watchdeck is locked</string>
     <string name="lock_unlock">Unlock</string>
-    <string name="lock_unlock_title">Unlock Frigate Bridge</string>
+    <string name="lock_unlock_title">Unlock Watchdeck</string>
     <string name="lock_confirm">Confirm that it is you</string>
     <string name="settings_security">Security</string>
     <string name="settings_app_lock">App lock</string>

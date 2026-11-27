@@ -1,0 +1,17 @@
+Watchdeck
+Copyright 2026 Federico Raponi
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project includes icons from Material Symbols by Google
+(https://github.com/google/material-design-icons), licensed under the Apache License, Version 2.0.
+The drawables named symbol_*.xml come from it, with the theme tint attribute removed.
+
+The names of group icons (such as "LuHouse") are those of Lucide icons, as Frigate's web interface stores them;
+no Lucide artwork is included.
+
+The libraries the app depends on, with their versions, are listed in gradle/libs.versions.toml. Each is
+distributed under its own licence.
+
+Watchdeck is not affiliated with, endorsed or sponsored by Frigate, Inc. "Frigate" and "Frigate NVR" are
+trademarks of Frigate, Inc.

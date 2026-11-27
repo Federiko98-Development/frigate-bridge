@@ -1,4 +1,4 @@
-# Frigate Bridge
+# Watchdeck
 
 An unofficial mobile client for [Frigate](https://frigate.video) 0.18+ servers, built with Kotlin Multiplatform.
 Logic is shared in `shared`; the interface is native, in `androidApp` (Jetpack Compose, Material 3 Expressive).
@@ -30,7 +30,7 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 
 ## Links to an event
 
-`frigatebridge://event?id=<review id>&server=<address>` opens the app on that alert or detection. The address is one
+`watchdeck://event?id=<review id>&server=<address>` opens the app on that alert or detection. The address is one
 of those saved for the server in the app (same host and port); without it the default server is used. Another app
 can send such a link, for example a notification of the Home Assistant companion app (not tried yet):
 
@@ -49,7 +49,7 @@ actions:
       message: "{{ trigger.payload_json['after']['camera'] }}"
       data:
         clickAction: >-
-          deep-link://frigatebridge://event?id={{ trigger.payload_json['after']['id'] }}&server=https://frigate.example.com
+          deep-link://watchdeck://event?id={{ trigger.payload_json['after']['id'] }}&server=https://frigate.example.com
 ```
 
 ## Requirements
@@ -75,7 +75,7 @@ A release is shrunk with R8. To sign it, create a key once and keep it safe: upd
 same one.
 
 ```bash
-keytool -genkeypair -keystore release.jks -alias frigate-bridge -keyalg RSA -keysize 4096 -validity 10000
+keytool -genkeypair -keystore release.jks -alias watchdeck -keyalg RSA -keysize 4096 -validity 10000
 ```
 
 Copy `keystore.properties.example` to `keystore.properties`, fill in the passwords, then build the APK
@@ -92,8 +92,10 @@ English (default) and Italian. On Android 13 and later the app language can be c
 
 ## License
 
-[Apache 2.0](LICENSE). This is an independent project, not affiliated with Frigate.
+[Apache 2.0](LICENSE). Third-party material is listed in [NOTICE](NOTICE).
 
-## Icons
+## Trademarks
 
-[Material Symbols](https://github.com/google/material-design-icons) by Google, under the Apache License 2.0.
+Watchdeck is an independent project. It is not affiliated with, endorsed or sponsored by Frigate, Inc.
+"Frigate" and "Frigate NVR" are trademarks of Frigate, Inc.; they are used here only to say which servers the app
+works with. See Frigate's [trademark policy](https://github.com/blakeblackshear/frigate/blob/dev/TRADEMARK.md).

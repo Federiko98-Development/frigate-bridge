@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		AEA8572C05BF56A9CE9F0F03 /* FrigateBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FrigateBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AEA8572C05BF56A9CE9F0F03 /* Watchdeck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Watchdeck.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		9789BECB8F229B563110475D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AEA8572C05BF56A9CE9F0F03 /* FrigateBridge.app */,
+				AEA8572C05BF56A9CE9F0F03 /* Watchdeck.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = AEA8572C05BF56A9CE9F0F03 /* FrigateBridge.app */;
+			productReference = AEA8572C05BF56A9CE9F0F03 /* Watchdeck.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

@@ -1,4 +1,4 @@
-rootProject.name = "FrigateBridge"
+rootProject.name = "Watchdeck"
 
 pluginManagement {
     repositories {

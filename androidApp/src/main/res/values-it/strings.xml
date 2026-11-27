@@ -195,9 +195,9 @@
     <string name="events_from">dalle %1$s</string>
     <string name="events_today_again">Torna a oggi</string>
     <string name="events_mark_all_short">Segna come visti</string>
-    <string name="lock_title">Frigate Bridge è bloccata</string>
+    <string name="lock_title">Watchdeck è bloccata</string>
     <string name="lock_unlock">Sblocca</string>
-    <string name="lock_unlock_title">Sblocca Frigate Bridge</string>
+    <string name="lock_unlock_title">Sblocca Watchdeck</string>
     <string name="lock_confirm">Conferma che sei tu</string>
     <string name="settings_security">Sicurezza</string>
     <string name="settings_app_lock">Blocco dell’app</string>

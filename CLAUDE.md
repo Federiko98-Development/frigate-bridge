@@ -1,4 +1,4 @@
-# Frigate Bridge
+# Watchdeck
 
 Android (and later iOS) client for Frigate 0.18+ servers. Kotlin Multiplatform: shared logic, native interfaces.
 
@@ -157,7 +157,7 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   and the exports are files served outside `/api` (`/clips/…`, `/exports/…`) that need the same Bearer header.
 - A review moment has its own page: `/api/review/{id}` (which does not say whether it was viewed), played as
   recordings from 4 s before it to 4 s after it, as Frigate's web interface does.
-- `frigatebridge://event?id=…&server=…` opens a review moment, only on a saved server (`server/EventLink.kt`).
+- `watchdeck://event?id=…&server=…` opens a review moment, only on a saved server (`server/EventLink.kt`).
   Anything on the phone may send such a link: keep it read only, apart from marking the moment viewed.
 - Phase 7 (push notifications) is waiting on a decision: own bridge with Firebase, or Home Assistant.
 
