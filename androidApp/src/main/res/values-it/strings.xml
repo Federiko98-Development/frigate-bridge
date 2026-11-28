@@ -111,6 +111,8 @@
     <string name="settings_about">Informazioni</string>
     <string name="settings_source">Codice sorgente</string>
     <string name="settings_about_hint">Versione %1$s · Apache 2.0 · Non affiliata a Frigate</string>
+    <string name="settings_privacy">Informativa sulla privacy</string>
+    <string name="settings_privacy_hint">Cosa salva l\'app e dove vanno i tuoi dati</string>
     <string name="video_fullscreen">Schermo intero</string>
     <string name="video_exit_fullscreen">Esci da schermo intero</string>
     <string name="ptz_title">Movimento</string>

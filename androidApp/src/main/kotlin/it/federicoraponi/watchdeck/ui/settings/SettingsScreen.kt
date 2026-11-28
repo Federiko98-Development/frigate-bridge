@@ -52,6 +52,7 @@ import org.koin.androidx.compose.koinViewModel
 
 private const val ADMIN_PAGES = 5
 private const val SOURCE_URL = "https://github.com/Federiko98-Development/watchdeck"
+private const val PRIVACY_URL = "$SOURCE_URL/blob/main/PRIVACY.md"
 
 data class SettingsActions(
     val setThemeMode: (ThemeMode) -> Unit = {},
@@ -403,7 +404,15 @@ private fun About() {
             description = stringResource(R.string.settings_about_hint, version),
             onClick = { uriHandler.openUri(SOURCE_URL) },
             index = 0,
-            count = 1,
+            count = 2,
+        )
+        LinkItem(
+            title = stringResource(R.string.settings_privacy),
+            icon = Symbols.Shield,
+            description = stringResource(R.string.settings_privacy_hint),
+            onClick = { uriHandler.openUri(PRIVACY_URL) },
+            index = 1,
+            count = 2,
         )
     }
 }

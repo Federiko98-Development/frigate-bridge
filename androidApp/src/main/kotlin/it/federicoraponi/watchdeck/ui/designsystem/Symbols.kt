@@ -109,6 +109,9 @@ object Symbols {
     val Share: ImageVector
         @Composable get() = ImageVector.vectorResource(R.drawable.symbol_share)
 
+    val Shield: ImageVector
+        @Composable get() = ImageVector.vectorResource(R.drawable.symbol_shield)
+
     val Star: ImageVector
         @Composable get() = ImageVector.vectorResource(R.drawable.symbol_star)
 
