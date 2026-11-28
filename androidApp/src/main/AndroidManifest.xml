@@ -43,6 +43,22 @@
                     android:host="event" />
             </intent-filter>
         </activity>
+        <!-- The way back from the browser after signing in at an external provider. Only the answer to a
+             sign-in in progress is taken. -->
+        <activity
+            android:exported="true"
+            android:name=".signin.SignInRedirectActivity"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="${applicationId}" />
+            </intent-filter>
+        </activity>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

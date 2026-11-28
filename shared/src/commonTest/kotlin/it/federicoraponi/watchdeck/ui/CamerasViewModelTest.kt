@@ -20,7 +20,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             assertEquals(listOf("front_door", "garage"), viewModel.cameras("home").names())
 
             viewModel.switchTo("office")
@@ -36,7 +36,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             viewModel.cameras("home")
 
             viewModel.selectGroup("Outside")
@@ -52,7 +52,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             viewModel.cameras("home")
 
             viewModel.showCameras("Outside", setOf("front_door"))
@@ -60,7 +60,7 @@ class CamerasViewModelTest : ViewModelTest() {
             assertEquals(listOf("front_door"), outside.names())
 
             // Another screen finds the same choice, and the other groups are untouched.
-            val second = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val second = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             second.cameras("home")
             second.selectGroup("Outside")
             assertEquals(listOf("front_door"), second.state.first { it.selectedGroup == "Outside" }.names())
@@ -74,7 +74,7 @@ class CamerasViewModelTest : ViewModelTest() {
             fixture.saveBoth()
             fixture.registry.activate("home")
             fixture.home.online = false
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             val failed = viewModel.state.first { it.content is CamerasContent.Failed }
             assertEquals(CamerasContent.Failed(ConnectionProblem.Unreachable), failed.content)
 
@@ -89,7 +89,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             viewModel.cameras("home")
 
             fixture.monitor.status.value = NetworkStatus(isOnline = false)
@@ -98,7 +98,7 @@ class CamerasViewModelTest : ViewModelTest() {
 
             // Another screen opened meanwhile shows the same cameras.
             fixture.home.online = false
-            val second = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val second = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             assertEquals(listOf("front_door", "garage"), second.cameras("home").names())
             fixture.home.online = true
 
@@ -114,7 +114,7 @@ class CamerasViewModelTest : ViewModelTest() {
         runTest {
             fixture.saveBoth()
             fixture.registry.activate("home")
-            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor)
+            val viewModel = CamerasViewModel(fixture.registry, fixture.settings, fixture.monitor, fixture.signIn)
             viewModel.cameras("home")
 
             fixture.registry.remove("home")

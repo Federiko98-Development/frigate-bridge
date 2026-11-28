@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -58,10 +57,12 @@ import it.federicoraponi.watchdeck.ui.camera.ZoomableVideo
 import it.federicoraponi.watchdeck.ui.camera.rememberRecordingPlayer
 import it.federicoraponi.watchdeck.ui.camera.seekBy
 import it.federicoraponi.watchdeck.ui.capture.LocalFrameCapture
-import it.federicoraponi.watchdeck.ui.capture.PhotoButton
+import it.federicoraponi.watchdeck.ui.capture.TakePhotoButton
 import it.federicoraponi.watchdeck.ui.capture.rememberCaptures
+import it.federicoraponi.watchdeck.ui.designsystem.ActionRow
 import it.federicoraponi.watchdeck.ui.designsystem.BackButton
 import it.federicoraponi.watchdeck.ui.designsystem.ConfirmSheet
+import it.federicoraponi.watchdeck.ui.designsystem.ControlGroup
 import it.federicoraponi.watchdeck.ui.designsystem.KeepScreenOn
 import it.federicoraponi.watchdeck.ui.designsystem.NoticeCard
 import it.federicoraponi.watchdeck.ui.designsystem.PrimaryButton
@@ -92,7 +93,7 @@ fun ExportRoute(
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     val player =
         state.file?.let { file ->
-            val clip = RecordingClip(file.url, file.headers, file.certificateSha256, 0, 0)
+            val clip = RecordingClip(file.url, file.authorization, file.certificateSha256, 0, 0)
             rememberRecordingPlayer(
                 clip = clip,
                 seek = SeekRequest(0, 0),
@@ -193,10 +194,15 @@ fun ExportScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             VideoFrame(video)
-            VideoSeekBar(player)
-            RecordingTransport(player, onSkip = { player?.seekBy(it) })
-            actions.takePhoto?.let { PhotoButton(it) }
-            FullscreenButton(actions.fullscreen)
+            ControlGroup {
+                VideoSeekBar(player)
+                RecordingTransport(player, onSkip = { player?.seekBy(it) })
+            }
+            // Full screen is always there, so the row is never empty.
+            ActionRow {
+                actions.takePhoto?.let { TakePhotoButton(it) }
+                FullscreenButton(actions.fullscreen)
+            }
             if (name.isNotEmpty()) {
                 Text(
                     name.replace('_', ' '),
@@ -209,14 +215,22 @@ fun ExportScreen(
                 if (isBusy) {
                     DownloadProgress(onCancel = actions.cancel)
                 } else if (item != null) {
-                    PrimaryButton(
-                        text = stringResource(R.string.export_save),
-                        onClick = { actions.save(file, item) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    FilledTonalButton(onClick = { actions.share(file) }, shapes = ButtonDefaults.shapes()) {
-                        Icon(Symbols.Share, contentDescription = null)
-                        Text(stringResource(R.string.export_share), modifier = Modifier.padding(start = Spacing.sm))
+                    // Side by side when they fit, one under the other with large fonts.
+                    ActionRow {
+                        PrimaryButton(
+                            text = stringResource(R.string.export_save),
+                            onClick = { actions.save(file, item) },
+                        )
+                        FilledTonalButton(
+                            onClick = { actions.share(file) },
+                            shapes = ButtonDefaults.shapes(),
+                        ) {
+                            Icon(Symbols.Share, contentDescription = null)
+                            Text(
+                                stringResource(R.string.export_share),
+                                modifier = Modifier.padding(start = Spacing.sm),
+                            )
+                        }
                     }
                 }
             }

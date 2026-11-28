@@ -1,6 +1,6 @@
 # Watchdeck privacy policy
 
-Last updated: 27 November 2026
+Last updated: 28 November 2026
 
 Watchdeck is a client for Frigate NVR servers that you, or someone who gave you access, run. It is an independent,
 open source project and is not affiliated with Frigate, Inc.
@@ -13,7 +13,8 @@ developer runs no server that the app talks to. The developer receives none of y
 ## What stays on your phone
 
 - The addresses and names of the servers you add, and your user names.
-- Your passwords and session tokens, encrypted with a key kept in the Android Keystore.
+- Your passwords and session tokens, encrypted with a key kept in the Android Keystore. For a server that signs you
+  in through an external provider, the tokens that provider gives the app, encrypted the same way.
 - Your settings, such as the theme and which cameras you hide.
 - Videos you share are first downloaded to the app's temporary storage.
 
@@ -24,6 +25,11 @@ Photos and clips that you choose to save go to your phone's gallery and stay the
 
 The app connects to the servers you add, to sign you in, show live and recorded video and make the changes you ask
 for. What those servers store and log is decided by whoever runs them.
+
+For a server that uses an external sign-in, the app also talks to the sign-in provider whose address you enter.
+You type your password in your phone's browser, on the provider's page: the app never receives it. The app gets
+tokens from the provider and sends them to that server, at the addresses you saved for it. What the provider stores
+and logs is decided by whoever runs it.
 
 An address that starts with `http://` is not encrypted: others on the same network could read the password and the
 video. The app warns you about it. Use `https://` whenever you can.

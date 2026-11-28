@@ -56,6 +56,7 @@ import androidx.graphics.shapes.RoundedPolygon
 import it.federicoraponi.watchdeck.R
 import it.federicoraponi.watchdeck.ui.ConnectionProblem
 import it.federicoraponi.watchdeck.ui.VideoFailure
+import it.federicoraponi.watchdeck.ui.VideoProblem
 
 // Container-first layout: content sits in tonal, generously rounded containers, without shadows or dividers.
 
@@ -425,10 +426,28 @@ fun unavailableText(
 fun failureText(
     failure: VideoFailure,
     fallback: Int,
+): String = listOfNotNull(reasonText(failure, fallback), failure.detail).joinToString("\n")
+
+/** The failure in words: the [VideoFailure.problem] or the player's reason, otherwise [fallback]. */
+@Composable
+fun reasonText(
+    failure: VideoFailure,
+    fallback: Int,
 ): String {
     val problem = failure.problem
-    val text = if (problem != null) problemText(problem) else stringResource(fallback)
-    return listOfNotNull(text, failure.detail).joinToString("\n")
+    if (problem != null) return problemText(problem)
+    return stringResource(
+        when (failure.reason) {
+            VideoProblem.NoPicture -> R.string.video_reason_no_picture
+            VideoProblem.Stalled -> R.string.video_reason_stalled
+            VideoProblem.UnsupportedFormat -> R.string.video_reason_format
+            VideoProblem.Refused -> R.string.video_reason_refused
+            VideoProblem.Connection -> R.string.video_reason_connection
+            VideoProblem.WebRtcUnreachable -> R.string.video_reason_webrtc
+            VideoProblem.ServerError -> R.string.video_reason_server
+            null -> fallback
+        },
+    )
 }
 
 /** A status that changes on its own, such as the progress of an export, said again by screen readers. */
@@ -454,5 +473,12 @@ fun problemText(problem: ConnectionProblem): String =
             ConnectionProblem.RateLimited -> R.string.problem_rate_limited
             ConnectionProblem.UntrustedCertificate -> R.string.problem_certificate
             ConnectionProblem.UnexpectedResponse -> R.string.problem_unexpected
+            ConnectionProblem.ExternalSignIn -> R.string.problem_external_sign_in
+            ConnectionProblem.SignInRequired -> R.string.problem_sign_in_required
+            ConnectionProblem.SignInRefused -> R.string.problem_sign_in_refused
+            ConnectionProblem.SignInCancelled -> R.string.problem_sign_in_cancelled
+            ConnectionProblem.ProviderUnreachable -> R.string.problem_provider_unreachable
+            ConnectionProblem.ProviderMisconfigured -> R.string.problem_provider_misconfigured
+            ConnectionProblem.NoBrowser -> R.string.problem_no_browser
         },
     )

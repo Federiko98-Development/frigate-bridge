@@ -46,7 +46,7 @@ class CameraViewModel(
     private var stopWhenStarted = false
     private var liveJob: Job? = null
     private var httpsJob: Job? = null
-    private var httpsFailure: VideoFailure? = null
+    private var snapshotFailures = 0
 
     // One command at a time and in order, so that a STOP never overtakes its movement.
     private val ptzCommands = Channel<String>(Channel.UNLIMITED)
@@ -127,39 +127,9 @@ class CameraViewModel(
         mutableState.update { it.copy(controls = controls.copy(isLiveOnly = on, isApplying = true, failure = null)) }
         viewModelScope.launch {
             val session = session() ?: return@launch
-            val key = "${camera.serverId}/${camera.cameraName}"
             var failure: VideoFailure? = null
             try {
-                val current = cameraIn(session)
-                if (current != null) {
-                    if (on) {
-                        // Detection goes before motion: Frigate keeps motion on while it detects.
-                        val running =
-                            listOfNotNull(
-                                RECORDING.takeIf { current.isRecording },
-                                SNAPSHOTS.takeIf { current.isSavingSnapshots },
-                                DETECTION.takeIf { current.isDetecting },
-                                MOTION.takeIf { current.isDetectingMotion },
-                                AUDIO.takeIf { current.isDetectingAudio },
-                            )
-                        // Saved first: a failure half way must not lose what to switch back on.
-                        if (running.isNotEmpty()) {
-                            settings.update {
-                                it.copy(liveOnlyRestore = it.liveOnlyRestore + (key to running.toSet()))
-                            }
-                        }
-                        session.setCameraFeatures(camera.cameraName, running.map { it to false })
-                    } else {
-                        // Without a note of what was on, e.g. switched off elsewhere, the usual functions come back.
-                        val before =
-                            settings.settings.first().liveOnlyRestore[key] ?: setOf(MOTION, DETECTION, RECORDING)
-                        val wanted =
-                            listOf(MOTION, DETECTION, RECORDING, SNAPSHOTS, AUDIO)
-                                .filter { it in before && (it != RECORDING || current.canRecord) }
-                        session.setCameraFeatures(camera.cameraName, wanted.map { it to true })
-                        settings.update { it.copy(liveOnlyRestore = it.liveOnlyRestore - key) }
-                    }
-                }
+                session.switchLiveOnly(camera, on, settings)
             } catch (error: FrigateError) {
                 failure = error.toVideoFailure()
             }
@@ -392,7 +362,7 @@ class CameraViewModel(
 
     /** Negotiates a connection for the selected stream through [peer]. */
     fun connectLive(peer: LivePeer) {
-        val stream = mutableState.value.selectedStream ?: return
+        val stream = mutableState.value.liveStream ?: return
         liveJob?.cancel()
         mutableState.update { it.copy(live = LiveState.Connecting) }
         liveJob =
@@ -404,10 +374,10 @@ class CameraViewModel(
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (error: FrigateError) {
-                    liveFailed(error.toVideoFailure())
+                    liveFailed(error.toVideoFailure().copy(reason = VideoProblem.ServerError))
                 } catch (error: Exception) {
                     // The platform's WebRTC library refused the offer or the answer.
-                    liveFailed(VideoFailure(detail = error.message))
+                    liveFailed(VideoFailure(detail = error.message, reason = VideoProblem.Connection))
                 }
             }
     }
@@ -423,18 +393,53 @@ class CameraViewModel(
         mutableState.update { it.copy(live = LiveState.Playing) }
     }
 
-    /** The connection could not be established, or was lost. If the HTTPS stream fails, WebRTC is tried. */
+    /**
+     * The way in use could not be established, or was lost. The next one is tried and the reason kept for the screen,
+     * unless every way would fail alike.
+     */
     fun liveFailed(failure: VideoFailure = VideoFailure()) {
         val current = mutableState.value
-        // A first explanation is more useful than the "connection failed" that may follow it.
+        // Told twice about the same end, e.g. by an error and then by a time limit.
         if (current.live is LiveState.Failed) return
-        if (current.transport == LiveTransport.Https && current.selectedStream != null) {
-            httpsFailure = failure
-            useWebRtc()
-        } else {
-            // The reason the first choice failed usually explains more.
-            val shown = httpsFailure?.takeIf { failure == VideoFailure() } ?: failure
-            mutableState.update { it.copy(live = LiveState.Failed(shown)) }
+        val selected = current.selectedStream
+        val stream = current.liveStream
+        if (failure.stopsEveryWay || selected == null || stream == null) {
+            httpsJob?.cancel()
+            mutableState.update { it.copy(live = LiveState.Failed(failure)) }
+            // The session learns that signing in is needed, so that the cameras offer it.
+            if (failure.problem == ConnectionProblem.SignInRequired) {
+                viewModelScope.launch { session()?.refresh() }
+            }
+            return
+        }
+        val known =
+            if (failure.reason == null && current.transport == LiveTransport.WebRtc) {
+                failure.copy(reason = VideoProblem.WebRtcUnreachable)
+            } else {
+                failure
+            }
+        val setbacks = current.setbacks + LiveSetback(LiveAttempt(current.transport, stream), known)
+        val next = nextLiveAttempt(current.streams.map { it.name }, selected, setbacks)
+        mutableState.update {
+            it.copy(setbacks = setbacks, live = if (next == null) LiveState.Failed(known) else it.live)
+        }
+        if (next != null) begin(next)
+    }
+
+    /**
+     * The camera's picture of this moment, for when only still pictures get through; `null` if it could not be read.
+     * A few failures in a row end that way too.
+     */
+    suspend fun liveSnapshot(): ByteArray? {
+        val session = session() ?: return null
+        return try {
+            session.latestFrame(camera.cameraName, SNAPSHOT_HEIGHT).also {
+                snapshotFailures = 0
+                if (mutableState.value.live != LiveState.Playing) livePlaying()
+            }
+        } catch (error: FrigateError) {
+            if (++snapshotFailures >= MAX_SNAPSHOT_FAILURES) liveFailed(error.toVideoFailure())
+            null
         }
     }
 
@@ -456,40 +461,35 @@ class CameraViewModel(
 
     private fun startLive() {
         val stream = mutableState.value.selectedStream ?: return
+        mutableState.update { it.copy(setbacks = emptyList()) }
+        begin(LiveAttempt(LiveTransport.Https, stream))
+    }
+
+    private fun begin(attempt: LiveAttempt) {
         stopLive()
         httpsJob?.cancel()
-        httpsFailure = null
+        snapshotFailures = 0
         mutableState.update {
             it.copy(
-                transport = LiveTransport.Https,
+                transport = attempt.transport,
+                liveStream = attempt.stream,
                 httpsStream = null,
                 live = LiveState.Connecting,
                 liveAttempt = it.liveAttempt + 1,
             )
         }
+        // The screen starts the other two: it owns the WebRTC connection, and asks for the pictures.
+        if (attempt.transport != LiveTransport.Https) return
         httpsJob =
             viewModelScope.launch {
                 try {
                     val session = session() ?: return@launch
-                    val source = session.httpsLiveStream(stream)
+                    val source = session.httpsLiveStream(attempt.stream)
                     mutableState.update { it.copy(httpsStream = source) }
                 } catch (error: FrigateError) {
-                    // WebRTC asks the same server, so it would fail the same way.
-                    mutableState.update { it.copy(live = LiveState.Failed(error.toVideoFailure())) }
+                    liveFailed(error.toVideoFailure().copy(reason = VideoProblem.ServerError))
                 }
             }
-    }
-
-    private fun useWebRtc() {
-        httpsJob?.cancel()
-        mutableState.update {
-            it.copy(
-                transport = LiveTransport.WebRtc,
-                httpsStream = null,
-                live = LiveState.Connecting,
-                liveAttempt = it.liveAttempt + 1,
-            )
-        }
     }
 
     private fun loadCamera() {
@@ -541,8 +541,6 @@ class CameraViewModel(
 private const val STOP = "STOP"
 
 // Frigate's names of the functions switched for the live view alone.
-private val DETECTION = CameraFeature.Detection.apiName
-private val RECORDING = CameraFeature.Recording.apiName
-private val SNAPSHOTS = CameraFeature.Snapshots.apiName
-private val MOTION = CameraFeature.Motion.apiName
-private const val AUDIO = "audio"
+
+private const val SNAPSHOT_HEIGHT = 720
+private const val MAX_SNAPSHOT_FAILURES = 3

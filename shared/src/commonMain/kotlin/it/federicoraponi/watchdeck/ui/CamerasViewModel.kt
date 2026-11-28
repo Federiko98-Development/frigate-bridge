@@ -2,7 +2,9 @@ package it.federicoraponi.watchdeck.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import it.federicoraponi.watchdeck.auth.OidcSignIn
 import it.federicoraponi.watchdeck.camera.Camera
+import it.federicoraponi.watchdeck.camera.CameraFeature
 import it.federicoraponi.watchdeck.camera.CameraRef
 import it.federicoraponi.watchdeck.camera.GroupChoice
 import it.federicoraponi.watchdeck.camera.groupChoices
@@ -14,6 +16,8 @@ import it.federicoraponi.watchdeck.server.ConnectionState
 import it.federicoraponi.watchdeck.server.RegistryState
 import it.federicoraponi.watchdeck.server.Server
 import it.federicoraponi.watchdeck.server.ServerRegistry
+import it.federicoraponi.watchdeck.server.ServerSession
+import it.federicoraponi.watchdeck.server.ServerSignIn
 import it.federicoraponi.watchdeck.settings.AppSettings
 import it.federicoraponi.watchdeck.settings.HomeLayout
 import it.federicoraponi.watchdeck.settings.SettingsStore
@@ -53,6 +57,7 @@ sealed interface CamerasContent {
 
     data class Failed(
         val problem: ConnectionProblem,
+        val detail: String? = null,
     ) : CamerasContent
 }
 
@@ -73,6 +78,30 @@ data class CamerasState(
     val reloads: Int = 0,
     /** The phone has no network: what is on screen stays as it was. */
     val isOffline: Boolean = false,
+    /** The server signs users in at an external provider, so signing in again can be offered. */
+    val signsInExternally: Boolean = false,
+    /** The browser is open: the app waits for the provider to send it back. */
+    val isWaitingForBrowser: Boolean = false,
+    /** Why the last sign-in in the browser did not work. */
+    val signInFailure: SignInFailure? = null,
+    /** The camera being held, with its quick actions. */
+    val quick: QuickActions? = null,
+    /** Whether the signed-in user may change camera settings. */
+    val canChangeSettings: Boolean = false,
+)
+
+/** What can be done with one camera without opening it. */
+data class QuickActions(
+    val camera: Camera,
+    /** The camera's switches; offered to administrators only. */
+    val controls: CameraControls,
+    /** Whether it can be hidden from the group on screen: not when it is the only one shown. */
+    val canHide: Boolean,
+)
+
+data class SignInFailure(
+    val problem: ConnectionProblem,
+    val detail: String?,
 )
 
 /** The cameras of the active server, and only of that one. */
@@ -80,7 +109,12 @@ class CamerasViewModel(
     private val registry: ServerRegistry,
     private val settingsStore: SettingsStore,
     private val network: NetworkMonitor,
+    private val oidc: OidcSignIn,
 ) : ViewModel() {
+    private val browser = MutableStateFlow(BrowserProgress())
+
+    private val held = MutableStateFlow<HeldCamera?>(null)
+
     private val selectedGroup = MutableStateFlow<GroupSelection?>(null)
 
     private val refresh = MutableStateFlow(RefreshProgress())
@@ -93,7 +127,14 @@ class CamerasViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<CamerasState> =
         combine(
-            registry.state.flatMapLatest { activeServer(it) },
+            combine(registry.state.flatMapLatest { activeServer(it) }, browser, held) { cameras, signIn, camera ->
+                val isHere = cameras.server != null && signIn.serverId == cameras.server.id
+                cameras.copy(
+                    quick = camera?.let { quickActions(cameras, it) },
+                    isWaitingForBrowser = isHere && signIn.isWaiting,
+                    signInFailure = signIn.failure.takeIf { isHere },
+                )
+            },
             settingsStore.settings,
             refresh,
             offline,
@@ -123,6 +164,104 @@ class CamerasViewModel(
         // Without a network, reading a connected server again would only replace its cameras with an error.
         val isOnline = network.status.first().isOnline
         if (isOnline || session.state.value !is ConnectionState.Connected) session.refresh()
+    }
+
+    /** Signs in again in the browser, for the active server. */
+    fun signIn() {
+        val server = registry.state.value?.activeServer ?: return
+        val method = server.signIn as? ServerSignIn.Oidc ?: return
+        if (browser.value.isWaiting) return
+        browser.value = BrowserProgress(server.id, isWaiting = true)
+        viewModelScope.launch {
+            val failure =
+                try {
+                    registry.signedIn(server.id, oidc.signIn(method.settings))
+                    null
+                } catch (error: FrigateError) {
+                    SignInFailure(error.toProblem(), error.signInDetail())
+                }
+            browser.value = BrowserProgress(server.id, failure = failure)
+        }
+    }
+
+    fun cancelSignIn() = oidc.cancel()
+
+    /** Offers the quick actions of [camera]. */
+    fun hold(camera: CameraRef) {
+        // A change still on its way stays with its camera.
+        if (held.value?.isApplying != true) held.value = HeldCamera(camera)
+    }
+
+    fun release() {
+        held.value = null
+    }
+
+    fun setFeature(
+        feature: CameraFeature,
+        enabled: Boolean,
+    ) {
+        val controls = state.value.quick?.controls ?: return
+        if (feature !in controls.switchable) return
+        change { session, ref -> session.setCameraFeature(ref.cameraName, feature, enabled) }
+    }
+
+    /** Leaves the held camera with its live view alone, or brings back what was on. */
+    fun setLiveOnly(on: Boolean) =
+        change(liveOnly = on) { session, ref -> session.switchLiveOnly(ref, on, settingsStore) }
+
+    /** Hides the held camera from the group on screen; holding the group brings it back. */
+    fun hideHeld() {
+        val current = state.value
+        val quick = current.quick?.takeIf { it.canHide } ?: return
+        val shown =
+            (current.content as? CamerasContent.Ready)
+                ?.cameras
+                ?.map { it.ref.cameraName }
+                ?.toSet()
+                ?: return
+        release()
+        showCameras(current.selectedGroup, shown - quick.camera.ref.cameraName)
+    }
+
+    private fun change(
+        liveOnly: Boolean? = null,
+        apply: suspend (ServerSession, CameraRef) -> Unit,
+    ) {
+        val target = held.value ?: return
+        if (target.isApplying || !state.value.canChangeSettings) return
+        val session = registry.session(target.camera.serverId) ?: return
+        val applying = target.copy(isApplying = true, wantsLiveOnly = liveOnly, failure = null)
+        held.value = applying
+        viewModelScope.launch {
+            val failure =
+                try {
+                    apply(session, target.camera)
+                    null
+                } catch (error: FrigateError) {
+                    error.toVideoFailure()
+                }
+            // Nothing is shown if the panel was closed meanwhile.
+            held.compareAndSet(applying, HeldCamera(target.camera, failure = failure))
+        }
+    }
+
+    private fun quickActions(
+        cameras: CamerasState,
+        target: HeldCamera,
+    ): QuickActions? {
+        val ready = cameras.content as? CamerasContent.Ready ?: return null
+        val camera = ready.cameras.firstOrNull { it.ref == target.camera } ?: return null
+        val controls = camera.controls(cameras.canChangeSettings)
+        return QuickActions(
+            camera = camera,
+            controls =
+                controls.copy(
+                    isApplying = target.isApplying,
+                    isLiveOnly = target.wantsLiveOnly ?: controls.isLiveOnly,
+                    failure = target.failure,
+                ),
+            canHide = ready.cameras.size > 1,
+        )
     }
 
     fun selectGroup(name: String?) {
@@ -192,6 +331,7 @@ class CamerasViewModel(
         if (server == null || session == null) {
             return flowOf(CamerasState(servers = servers, content = CamerasContent.NoServer))
         }
+        val isExternal = server.signIn is ServerSignIn.Oidc
         val hiddenCameras = settingsStore.settings.map { it.hiddenCameras }.distinctUntilChanged()
         return combine(session.state, selectedGroup, hiddenCameras) { connection, selection, hidden ->
             val summary = server.summary()
@@ -202,7 +342,9 @@ class CamerasViewModel(
                     CamerasState(
                         server = summary,
                         servers = servers,
-                        content = CamerasContent.Failed(connection.error.toProblem()),
+                        content =
+                            CamerasContent.Failed(connection.error.toProblem(), connection.error.signInDetail()),
+                        signsInExternally = isExternal,
                     )
                 is ConnectionState.Connected -> {
                     val snapshot = connection.snapshot
@@ -217,6 +359,7 @@ class CamerasViewModel(
                         groups = groups,
                         selectedGroup = group,
                         choices = choices,
+                        canChangeSettings = catalog.canChangeSettings,
                         content =
                             CamerasContent.Ready(
                                 cameras = choices.first { it.name == group }.shown,
@@ -229,6 +372,19 @@ class CamerasViewModel(
     }
 
     private fun Server.summary() = ServerSummary(id, name, colorIndex)
+
+    private data class HeldCamera(
+        val camera: CameraRef,
+        val isApplying: Boolean = false,
+        val wantsLiveOnly: Boolean? = null,
+        val failure: VideoFailure? = null,
+    )
+
+    private data class BrowserProgress(
+        val serverId: String? = null,
+        val isWaiting: Boolean = false,
+        val failure: SignInFailure? = null,
+    )
 
     private data class RefreshProgress(
         val running: Boolean = false,

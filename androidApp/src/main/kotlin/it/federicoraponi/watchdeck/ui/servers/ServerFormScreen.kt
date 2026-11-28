@@ -15,6 +15,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -59,6 +60,7 @@ import it.federicoraponi.watchdeck.ui.ServerFormArgs
 import it.federicoraponi.watchdeck.ui.ServerFormState
 import it.federicoraponi.watchdeck.ui.ServerFormViewModel
 import it.federicoraponi.watchdeck.ui.designsystem.BackButton
+import it.federicoraponi.watchdeck.ui.designsystem.ConnectedChoice
 import it.federicoraponi.watchdeck.ui.designsystem.FormField
 import it.federicoraponi.watchdeck.ui.designsystem.GroupHint
 import it.federicoraponi.watchdeck.ui.designsystem.ListGroup
@@ -94,6 +96,13 @@ data class ServerFormActions(
     val acceptCertificate: () -> Unit = {},
     val rejectCertificate: () -> Unit = {},
     val allowLocalNetwork: () -> Unit = {},
+    val setExternal: (Boolean) -> Unit = {},
+    val setIssuer: (String) -> Unit = {},
+    val setClientId: (String) -> Unit = {},
+    val setScopes: (String) -> Unit = {},
+    val setUseIdToken: (Boolean) -> Unit = {},
+    val useDetectedSignIn: () -> Unit = {},
+    val cancelSignIn: () -> Unit = {},
 )
 
 @Composable
@@ -129,6 +138,13 @@ fun ServerFormRoute(
                 acceptCertificate = viewModel::acceptCertificate,
                 rejectCertificate = viewModel::rejectCertificate,
                 allowLocalNetwork = allowLocalNetwork,
+                setExternal = viewModel::setExternal,
+                setIssuer = viewModel::setIssuer,
+                setClientId = viewModel::setClientId,
+                setScopes = viewModel::setScopes,
+                setUseIdToken = viewModel::setUseIdToken,
+                useDetectedSignIn = viewModel::useDetectedSignIn,
+                cancelSignIn = viewModel::cancelSignIn,
             ),
     )
 }
@@ -166,10 +182,10 @@ fun ServerFormScreen(
         ) {
             ServerPreviewCard(state)
             ServerFields(state, actions)
-            LoginFields(state, actions)
+            SignInFields(state, actions)
             ColorPicker(state.colorIndex, actions.setColor)
             if (state.sendsPasswordUnencrypted) NoticeCard(stringResource(R.string.form_cleartext_warning))
-            state.problem?.let { NoticeCard(problemText(it), announce = true) }
+            SignInNotices(state, actions)
             if (localNetworkBlocked) LocalNetworkNotice(actions.allowLocalNetwork)
             SaveButtons(state, actions)
         }
@@ -251,6 +267,101 @@ private fun ServerFields(
             )
         }
         GroupHint(stringResource(R.string.form_alternative_url_hint))
+    }
+}
+
+/** Who signs the users in, and what that way of signing in needs. */
+@Composable
+private fun SignInFields(
+    state: ServerFormState,
+    actions: ServerFormActions,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        ConnectedChoice(
+            labels =
+                listOf(stringResource(R.string.form_sign_in_password), stringResource(R.string.form_sign_in_external)),
+            selected = if (state.isExternal) 1 else 0,
+            onSelect = { actions.setExternal(it == 1) },
+        )
+        if (state.isExternal) ExternalFields(state, actions) else LoginFields(state, actions)
+    }
+}
+
+@Composable
+private fun ExternalFields(
+    state: ServerFormState,
+    actions: ServerFormActions,
+) {
+    val plain = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next)
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        ListGroup(title = stringResource(R.string.form_section_login)) {
+            FormField(
+                value = state.external.issuer,
+                onValueChange = actions.setIssuer,
+                label = R.string.form_issuer,
+                index = 0,
+                count = 3,
+                placeholder = R.string.form_issuer_example,
+                error = errorText(R.string.form_error_issuer, FormError.IssuerInvalid in state.errors),
+                keyboard = plain.copy(keyboardType = KeyboardType.Uri),
+            )
+            FormField(
+                value = state.external.clientId,
+                onValueChange = actions.setClientId,
+                label = R.string.form_client_id,
+                index = 1,
+                count = 3,
+                error = errorText(R.string.form_error_client_id, FormError.ClientIdMissing in state.errors),
+                keyboard = plain,
+            )
+            FormField(
+                value = state.external.scopes,
+                onValueChange = actions.setScopes,
+                label = R.string.form_scopes,
+                index = 2,
+                count = 3,
+                keyboard = plain.copy(imeAction = ImeAction.Done),
+            )
+        }
+        GroupHint(stringResource(R.string.form_external_hint))
+        GroupHint(stringResource(R.string.form_token_title))
+        ConnectedChoice(
+            labels = listOf(stringResource(R.string.form_token_access), stringResource(R.string.form_token_id)),
+            selected = if (state.external.useIdToken) 1 else 0,
+            onSelect = { actions.setUseIdToken(it == 1) },
+        )
+        GroupHint(stringResource(R.string.form_redirect_hint))
+        SelectionContainer(Modifier.padding(horizontal = Spacing.lg)) {
+            Text(
+                state.external.redirectUri,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+    }
+}
+
+/** Why the test failed, and what can be done about it. */
+@Composable
+private fun SignInNotices(
+    state: ServerFormState,
+    actions: ServerFormActions,
+) {
+    if (state.isWaitingForBrowser) {
+        NoticeCard(
+            stringResource(R.string.sign_in_waiting),
+            actionLabel = stringResource(R.string.cancel),
+            onAction = actions.cancelSignIn,
+            announce = true,
+        )
+    }
+    state.problem?.let { problem ->
+        NoticeCard(
+            listOfNotNull(problemText(problem), state.problemDetail).joinToString("\n"),
+            actionLabel = state.detectedSignIn?.let { stringResource(R.string.form_use_external) },
+            onAction = actions.useDetectedSignIn,
+            announce = true,
+        )
     }
 }
 
@@ -349,7 +460,14 @@ private fun SaveButtons(
         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         PrimaryButton(
-            text = stringResource(if (state.isSaving) R.string.form_testing else R.string.form_save),
+            text =
+                stringResource(
+                    when {
+                        state.isSaving -> R.string.form_testing
+                        state.isExternal -> R.string.form_sign_in_and_save
+                        else -> R.string.form_save
+                    },
+                ),
             onClick = actions.save,
             enabled = !state.isSaving,
             modifier = Modifier.fillMaxWidth(),

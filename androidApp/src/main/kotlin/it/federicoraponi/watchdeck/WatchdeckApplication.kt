@@ -2,6 +2,7 @@ package it.federicoraponi.watchdeck
 
 import android.app.Application
 import it.federicoraponi.watchdeck.di.initKoin
+import it.federicoraponi.watchdeck.signin.signInModule
 import it.federicoraponi.watchdeck.video.videoModule
 import org.koin.android.ext.koin.androidContext
 
@@ -10,7 +11,7 @@ class WatchdeckApplication : Application() {
         super.onCreate()
         initKoin {
             androidContext(this@WatchdeckApplication)
-            modules(videoModule)
+            modules(videoModule, signInModule)
         }
     }
 }

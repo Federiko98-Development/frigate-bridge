@@ -26,24 +26,42 @@ class CameraPreviews(
     }
 }
 
+/** What a card has to show: the last picture that arrived, and whether the pictures have stopped arriving. */
+data class PreviewPicture(
+    val image: ImageBitmap? = null,
+    val isFailing: Boolean = false,
+)
+
+// A single failure is nothing to tell: the next picture usually arrives.
+private const val FAILURES_TO_REPORT = 3
+
 /**
  * The current picture of a camera, reloaded while its card is on screen and the screen is in front. Keeps the
- * previous picture when a reload fails.
+ * previous picture when a reload fails, and says so when several in a row do.
  */
 @Composable
 fun previewPicture(
     camera: CameraRef,
     previews: CameraPreviews,
-): ImageBitmap? {
+): PreviewPicture {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val source by rememberUpdatedState(previews)
     val picture by
-        produceState<ImageBitmap?>(null, camera, lifecycle, previews.refreshKey) {
-            source.cached(camera)?.let { value = decodePicture(it) }
+        produceState(PreviewPicture(), camera, lifecycle, previews.refreshKey) {
+            source.cached(camera)?.let { value = PreviewPicture(decodePicture(it)) }
+            var failures = 0
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 do {
-                    source.load(camera)?.let { bytes -> decodePicture(bytes)?.let { value = it } }
+                    val next = source.load(camera)?.let { decodePicture(it) }
                     val pause = source.interval()
+                    if (next != null) {
+                        failures = 0
+                        value = PreviewPicture(next)
+                    } else {
+                        // Loaded only once, there is no later try to wait for.
+                        failures = if (pause == null) FAILURES_TO_REPORT else failures + 1
+                        if (failures >= FAILURES_TO_REPORT) value = value.copy(isFailing = true)
+                    }
                     if (pause != null) delay(pause)
                 } while (pause != null)
             }

@@ -59,6 +59,11 @@ sealed interface PlaybackState {
     data class Failed(
         val failure: VideoFailure,
     ) : PlaybackState
+
+    /** The video does not play: the recording is shown as still pictures instead, one for each moment asked. */
+    data class Stills(
+        val failure: VideoFailure,
+    ) : PlaybackState
 }
 
 data class TimelineState(
@@ -88,6 +93,12 @@ class TimelineViewModel(
     private var clipJob: Job? = null
     private var exportJob: Job? = null
     private var seeks = 0
+
+    // The clip that already failed once, so that a second failure of the same one is not tried again.
+    private var retriedWindow: PlaybackWindow? = null
+
+    // Why the video gave way to still pictures; `null` while video is being played.
+    private var stillsBecause: VideoFailure? = null
     private val mutableState = MutableStateFlow(TimelineState())
     val state: StateFlow<TimelineState> = mutableState.asStateFlow()
 
@@ -104,6 +115,8 @@ class TimelineViewModel(
 
     fun retry() {
         val current = mutableState.value
+        stillsBecause = null
+        retriedWindow = null
         when {
             current.day == null -> load()
             segments.isEmpty() -> openDay(current.day, current.time)
@@ -151,8 +164,36 @@ class TimelineViewModel(
         if (next != null) playFrom(next.start.toLong())
     }
 
-    fun playerFailed(detail: String?) {
-        mutableState.update { it.copy(playback = PlaybackState.Failed(VideoFailure(detail = detail))) }
+    /**
+     * The player gave up. The clip is asked for once more, which also renews an ended sign-in; failing again, the
+     * recording is shown as still pictures, which work wherever the server answers.
+     */
+    fun playerFailed(failure: VideoFailure) {
+        if (mutableState.value.playback !is PlaybackState.Ready) return
+        val failed = window
+        if (failed != null && (retriedWindow?.start != failed.start)) {
+            retriedWindow = failed
+            playFrom(mutableState.value.time, forceReload = true)
+        } else {
+            stillsBecause = failure
+            clipJob?.cancel()
+            mutableState.update { it.copy(playback = PlaybackState.Stills(failure)) }
+        }
+    }
+
+    /** The recorded picture of [time]; `null` if the server has none to give. */
+    suspend fun still(time: Long): ByteArray? {
+        val session = session() ?: return null
+        return try {
+            session.recordingStill(camera.cameraName, time, STILL_HEIGHT)
+        } catch (error: FrigateError) {
+            // A moment without a picture says nothing, a server that cannot be used does.
+            if (error.toVideoFailure().stopsEveryWay) {
+                stillsBecause = null
+                fail(error)
+            }
+            null
+        }
     }
 
     /** Asks the server for a file with the [seconds] that follow [start]. */
@@ -251,6 +292,11 @@ class TimelineViewModel(
     ) {
         // A moment without video gives way to a recorded one.
         val target = recordedMoment(mutableState.value.ranges, time, backwards) ?: return
+        val asStills = stillsBecause
+        if (asStills != null && !forceReload) {
+            mutableState.update { it.copy(time = target, playback = PlaybackState.Stills(asStills)) }
+            return
+        }
         val current = window
         val playback = mutableState.value.playback
         if (!forceReload && current != null && current.covers(target) && playback is PlaybackState.Ready) {
@@ -298,4 +344,5 @@ class TimelineViewModel(
 }
 
 private const val WINDOW_SECONDS = 3_600L
+private const val STILL_HEIGHT = 720
 private const val LATEST_LEAD_SECONDS = 60L

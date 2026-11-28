@@ -2,6 +2,9 @@ package it.federicoraponi.watchdeck.server
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import it.federicoraponi.watchdeck.auth.OidcClient
+import it.federicoraponi.watchdeck.auth.OidcSignIn
+import it.federicoraponi.watchdeck.auth.SignInBrowser
 import it.federicoraponi.watchdeck.frigate.FakeFrigate
 import it.federicoraponi.watchdeck.network.NetworkMonitor
 import it.federicoraponi.watchdeck.network.NetworkStatus
@@ -73,6 +76,24 @@ class FakeNetworkMonitor : NetworkMonitor {
     override val status = MutableStateFlow(NetworkStatus(isOnline = true, id = 1))
 }
 
+/** The time of every test of the sign-in, in seconds since the epoch. */
+const val NOW = 1_000_000L
+
+/** A browser that does what the test says once the app has opened the provider's page in it. */
+class FakeBrowser : SignInBrowser {
+    override val redirectUri = "com.example.app:/oauth2redirect"
+    val opened = mutableListOf<String>()
+    var canOpen = true
+    var onOpen: (String) -> Unit = {}
+
+    override fun open(url: String): Boolean {
+        if (!canOpen) return false
+        opened += url
+        onOpen(url)
+        return true
+    }
+}
+
 /** The registry with a home and an office server, as in the app's main scenario. */
 class Fixture {
     val home = FakeFrigate()
@@ -86,7 +107,10 @@ class Fixture {
     val network = FakeNetwork(mutableMapOf("home.example.com" to home, "office.example.com" to office))
     val store = MemoryServerStore()
     val secrets = FakeSecretStore()
-    val sessions = ServerSessionFactory(network, secrets)
+    val browser = FakeBrowser()
+    val oidc = OidcClient(lazy { network.create(null) }) { NOW }
+    val signIn = OidcSignIn(oidc, browser)
+    val sessions = ServerSessionFactory(network, secrets, oidc) { NOW }
     val registry = ServerRegistry(store, secrets, sessions)
     val settings = MemorySettingsStore()
     val monitor = FakeNetworkMonitor()

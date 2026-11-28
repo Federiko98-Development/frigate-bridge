@@ -41,20 +41,20 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import it.federicoraponi.watchdeck.R
 import it.federicoraponi.watchdeck.server.RecordingClip
-import it.federicoraponi.watchdeck.server.acceptingCertificate
 import it.federicoraponi.watchdeck.ui.SeekRequest
+import it.federicoraponi.watchdeck.ui.VideoFailure
 import it.federicoraponi.watchdeck.ui.capture.ProvidesPlayerFrames
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
 import it.federicoraponi.watchdeck.ui.designsystem.Symbols
+import it.federicoraponi.watchdeck.video.playbackFailure
+import it.federicoraponi.watchdeck.video.signedDataSource
 import kotlinx.coroutines.delay
-import okhttp3.OkHttpClient
 
 private const val POSITION_INTERVAL_MILLIS = 500L
 
@@ -70,7 +70,7 @@ fun rememberRecordingPlayer(
     speed: Float,
     onPosition: (Long) -> Unit,
     onEnded: () -> Unit,
-    onError: (String) -> Unit,
+    onError: (VideoFailure) -> Unit,
 ): ExoPlayer {
     val context = LocalContext.current
     val position by rememberUpdatedState(onPosition)
@@ -78,8 +78,7 @@ fun rememberRecordingPlayer(
     val failed by rememberUpdatedState(onError)
     val player =
         remember(clip) {
-            val http = OkHttpClient.Builder().acceptingCertificate(clip.certificateSha256).build()
-            val data = OkHttpDataSource.Factory(http).setDefaultRequestProperties(clip.headers)
+            val data = signedDataSource(clip.url, clip.authorization, clip.certificateSha256)
             ExoPlayer
                 .Builder(context)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(data))
@@ -98,7 +97,7 @@ fun rememberRecordingPlayer(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    failed(listOfNotNull(error.errorCodeName, error.cause?.message).joinToString(": "))
+                    failed(playbackFailure(error))
                 }
             }
         player.addListener(listener)

@@ -1,5 +1,6 @@
 package it.federicoraponi.watchdeck.server
 
+import it.federicoraponi.watchdeck.auth.OidcTokens
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,10 +55,28 @@ class ServerRegistry(
 
     suspend fun storedPassword(serverId: String): String? = secrets.read(passwordKey(serverId))
 
-    /** Adds or replaces a server. A `null` [password] keeps the stored one. */
+    /** The stored tokens of an external sign-in, if any. */
+    suspend fun storedSignIn(serverId: String): OidcTokens? = SecretOidcTokenStore(secrets, serverId).read()
+
+    /** Keeps the tokens of a user who has just signed in again, and reads the server. */
+    suspend fun signedIn(
+        serverId: String,
+        tokens: OidcTokens,
+    ) {
+        load()
+        val session = session(serverId) ?: return
+        SecretOidcTokenStore(secrets, serverId).write(tokens)
+        session.refresh()
+    }
+
+    /**
+     * Adds or replaces a server. A `null` [password] keeps the stored one. [signIn] are the tokens of an external
+     * sign-in; without them the stored ones are kept only if they still belong to the server.
+     */
     suspend fun save(
         server: Server,
         password: String?,
+        signIn: OidcTokens? = null,
     ) {
         load()
         mutex.withLock {
@@ -65,7 +84,13 @@ class ServerRegistry(
             // Secrets first: whoever observes the new server must already find them.
             if (password != null) secrets.write(passwordKey(server.id), password)
             secrets.write(tokenKey(server.id), null)
+            val before = current.servers.firstOrNull { it.id == server.id }
             openSessions.remove(server.id)?.close()
+            if (signIn != null) {
+                SecretOidcTokenStore(secrets, server.id).write(signIn)
+            } else if (before == null || !keepsSignIn(before, server)) {
+                secrets.write(oidcKey(server.id), null)
+            }
             val exists = current.servers.any { it.id == server.id }
             val servers =
                 if (exists) {
@@ -91,6 +116,7 @@ class ServerRegistry(
             openSessions.remove(serverId)?.close()
             secrets.write(passwordKey(serverId), null)
             secrets.write(tokenKey(serverId), null)
+            secrets.write(oidcKey(serverId), null)
         }
     }
 
@@ -117,3 +143,15 @@ class ServerRegistry(
         mutableState.value = next
     }
 }
+
+/**
+ * Whether the tokens of an external sign-in may go on being used: same provider settings, and no address they were
+ * not given to before.
+ */
+internal fun keepsSignIn(
+    before: Server,
+    after: Server,
+): Boolean =
+    after.signIn is ServerSignIn.Oidc &&
+        before.signIn == after.signIn &&
+        before.addresses.containsAll(after.addresses)

@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
@@ -25,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,7 @@ import androidx.media3.common.Player
 import it.federicoraponi.watchdeck.R
 import it.federicoraponi.watchdeck.ui.CameraState
 import it.federicoraponi.watchdeck.ui.ClipState
+import it.federicoraponi.watchdeck.ui.LiveTransport
 import it.federicoraponi.watchdeck.ui.TimelineState
 import it.federicoraponi.watchdeck.ui.VideoMode
 import it.federicoraponi.watchdeck.ui.capture.ClipButton
@@ -78,6 +82,26 @@ internal fun FullscreenCamera(
                 RecordingBadge(it.startedAt, Modifier.align(Alignment.TopCenter))
             }
             SnackbarHost(messages, Modifier.align(Alignment.Center))
+            // Which way the picture comes when it is not the usual one; the upright page tells why.
+            if (state.mode == VideoMode.Live && state.setbacks.isNotEmpty()) {
+                Text(
+                    stringResource(
+                        if (state.transport == LiveTransport.Snapshots) {
+                            R.string.live_notice_stills
+                        } else {
+                            R.string.live_notice_fullscreen
+                        },
+                    ),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .background(overlay, MaterialTheme.shapes.small)
+                            .padding(horizontal = Spacing.md, vertical = Spacing.xs)
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
             val ptz = state.ptz
             if (state.mode == VideoMode.Live && ptz != null) {
                 if (ptz.canPanAndTilt) {

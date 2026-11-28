@@ -1,8 +1,5 @@
 package it.federicoraponi.watchdeck.ui.camera
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.FilledTonalIconToggleButton
@@ -12,7 +9,6 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
@@ -28,9 +24,10 @@ import it.federicoraponi.watchdeck.ui.VideoMode
 import it.federicoraponi.watchdeck.ui.capture.ClipButton
 import it.federicoraponi.watchdeck.ui.capture.PhotoButton
 import it.federicoraponi.watchdeck.ui.capture.RecordingBadge
+import it.federicoraponi.watchdeck.ui.designsystem.ActionRow
 import it.federicoraponi.watchdeck.ui.designsystem.ConnectedChoice
+import it.federicoraponi.watchdeck.ui.designsystem.ControlGroup
 import it.federicoraponi.watchdeck.ui.designsystem.NoticeCard
-import it.federicoraponi.watchdeck.ui.designsystem.Spacing
 import it.federicoraponi.watchdeck.ui.designsystem.StatusText
 import it.federicoraponi.watchdeck.ui.designsystem.failureText
 
@@ -58,47 +55,53 @@ internal fun LiveControls(
     onMutedChange: (Boolean) -> Unit,
     onSelectStream: (String) -> Unit,
     onFullscreen: () -> Unit,
-    measures: LiveMeasures,
+    /** `false` once the stream turns out to have no sound the phone can play. */
+    hasAudio: Boolean,
     onPhoto: (() -> Unit)?,
     onStartClip: () -> Unit,
     onStopClip: () -> Unit,
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    ControlGroup {
         if (state.streams.size > 1) StreamChoice(state, onSelectStream)
-        // With large fonts the full screen button moves to a line of its own.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.md, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (measures.hasAudio != false) MuteButton(muted, onMutedChange)
+        // Full screen is always there, so the row is never empty. With large fonts it moves to a line of its own.
+        ActionRow {
+            if (hasAudio) MuteButton(muted, onMutedChange)
             onPhoto?.let { PhotoButton(it) }
             if (state.canRecordClip || state.clip is ClipState.Recording) {
                 ClipButton(state.clip, onStartClip, onStopClip)
             }
             FullscreenButton(onFullscreen)
         }
-        if (state.live == LiveState.Playing) {
-            val transport =
-                if (state.transport == LiveTransport.WebRtc) R.string.video_via_webrtc else R.string.video_via_https
-            val lines =
-                listOfNotNull(
-                    stringResource(transport),
-                    stringResource(R.string.video_no_audio).takeIf { measures.hasAudio == false },
-                    measures.firstFrameMillis?.let { stringResource(R.string.video_first_frame, it) },
-                    measures.roundTripMillis?.let { stringResource(R.string.video_round_trip, it) },
-                )
-            Text(
-                lines.joinToString("\n"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
     }
+}
+
+/** How the live view is arriving and how quickly, at the bottom of the page: details for the curious. */
+@Composable
+internal fun LiveDetails(
+    state: CameraState,
+    measures: LiveMeasures,
+) {
+    if (state.live != LiveState.Playing) return
+    val transport =
+        when (state.transport) {
+            LiveTransport.Https -> R.string.video_via_https
+            LiveTransport.WebRtc -> R.string.video_via_webrtc
+            LiveTransport.Snapshots -> R.string.video_via_stills
+        }
+    val lines =
+        listOfNotNull(
+            stringResource(transport),
+            stringResource(R.string.video_no_audio).takeIf { measures.hasAudio == false },
+            measures.firstFrameMillis?.let { stringResource(R.string.video_first_frame, it) },
+            measures.roundTripMillis?.let { stringResource(R.string.video_round_trip, it) },
+        )
+    Text(
+        lines.joinToString("\n"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** What is happening with the clip being recorded. */

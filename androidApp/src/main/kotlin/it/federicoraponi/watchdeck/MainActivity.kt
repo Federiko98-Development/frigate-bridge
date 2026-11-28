@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import it.federicoraponi.watchdeck.auth.OidcSignIn
 import it.federicoraponi.watchdeck.security.AppLockPrompt
 import it.federicoraponi.watchdeck.settings.ThemeMode
 import it.federicoraponi.watchdeck.ui.LockPurpose
@@ -25,6 +26,7 @@ import it.federicoraponi.watchdeck.ui.cameras.LocalGroupButtons
 import it.federicoraponi.watchdeck.ui.lock.LockScreen
 import it.federicoraponi.watchdeck.ui.navigation.AppNavigation
 import it.federicoraponi.watchdeck.ui.theme.WatchdeckTheme
+import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
     // The one the navigation observes: both belong to the activity.
     private val start: StartViewModel by viewModel()
     private val lock: LockViewModel by viewModel()
+    private val signIn: OidcSignIn by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -84,6 +87,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Back from the sign-in tab without its answer, which would have arrived before this.
+        signIn.returnedWithoutAnswer()
     }
 
     override fun onStart() {

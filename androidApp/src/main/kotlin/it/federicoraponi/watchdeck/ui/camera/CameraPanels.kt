@@ -62,7 +62,10 @@ fun PtzPanel(
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(start = Spacing.lg, top = Spacing.sm),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
                 ptz.presets.forEach { preset ->
                     FilledTonalButton(onClick = { onPreset(preset) }, shapes = ButtonDefaults.shapes()) {
                         Text(preset.replace('_', ' '))

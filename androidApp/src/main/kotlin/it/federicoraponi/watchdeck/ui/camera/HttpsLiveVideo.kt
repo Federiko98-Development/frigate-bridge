@@ -28,12 +28,14 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import it.federicoraponi.watchdeck.server.HttpsLiveStream
-import it.federicoraponi.watchdeck.server.acceptingCertificate
+import it.federicoraponi.watchdeck.ui.VideoFailure
+import it.federicoraponi.watchdeck.ui.VideoProblem
 import it.federicoraponi.watchdeck.ui.capture.ProvidesPlayerFrames
 import it.federicoraponi.watchdeck.video.LiveRenderersFactory
 import it.federicoraponi.watchdeck.video.WebSocketDataSource
+import it.federicoraponi.watchdeck.video.mediaClient
+import it.federicoraponi.watchdeck.video.playbackFailure
 import kotlinx.coroutines.delay
-import okhttp3.OkHttpClient
 
 private const val TAG = "FrigateLive"
 private const val FIRST_FRAME_TIMEOUT_MILLIS = 15_000L
@@ -61,7 +63,7 @@ fun HttpsLiveVideo(
     connectionKey: Any,
     muted: Boolean,
     onPlaying: () -> Unit,
-    onFailed: (String) -> Unit,
+    onFailed: (VideoFailure) -> Unit,
     onMeasures: (LiveMeasures) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -75,23 +77,23 @@ fun HttpsLiveVideo(
             val failed by rememberUpdatedState(onFailed)
             val report by rememberUpdatedState(onMeasures)
 
-            fun lost(reason: String) {
-                Log.w(TAG, "https: $reason")
+            fun lost(failure: VideoFailure) {
+                Log.w(TAG, "https: ${failure.reason} ${failure.detail.orEmpty()}")
                 // A stream that worked is worth connecting to again.
-                if ((rendered || reconnections > 0) && reconnections < MAX_RECONNECTIONS) {
+                if (failure.problem == null && (rendered || reconnections > 0) && reconnections < MAX_RECONNECTIONS) {
                     reconnections++
                 } else {
-                    failed(reason)
+                    failed(failure)
                 }
             }
 
             LifecycleStartEffect(source) {
                 val started = SystemClock.elapsedRealtime()
                 var measures = LiveMeasures()
-                val http = OkHttpClient.Builder().acceptingCertificate(source.certificateSha256).build()
+                val http = mediaClient(source.certificateSha256)
                 val media =
                     ProgressiveMediaSource
-                        .Factory(WebSocketDataSource.Factory(http, source.headers))
+                        .Factory(WebSocketDataSource.Factory(http, source.authorization))
                         // Retrying would ask to resume from where it stopped, which a live stream cannot do.
                         .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(0))
                         .createMediaSource(MediaItem.fromUri(source.url))
@@ -127,7 +129,7 @@ fun HttpsLiveVideo(
                         }
 
                         override fun onPlayerError(error: PlaybackException) {
-                            lost(listOfNotNull(error.errorCodeName, error.cause?.message).joinToString(": "))
+                            lost(playbackFailure(error))
                         }
                     },
                 )
@@ -146,7 +148,7 @@ fun HttpsLiveVideo(
                 LaunchedEffect(current, muted) { current.volume = if (muted) 0f else 1f }
                 LaunchedEffect(current) {
                     delay(FIRST_FRAME_TIMEOUT_MILLIS)
-                    if (!rendered) lost("No picture after ${FIRST_FRAME_TIMEOUT_MILLIS / 1_000} seconds")
+                    if (!rendered) lost(VideoFailure(reason = VideoProblem.NoPicture))
                 }
                 LaunchedEffect(current) {
                     var position = 0L
@@ -158,7 +160,7 @@ fun HttpsLiveVideo(
                             position = current.currentPosition
                             movedAt = now
                         } else if (rendered && now - movedAt > STALL_TIMEOUT_MILLIS) {
-                            lost("The picture stopped")
+                            lost(VideoFailure(reason = VideoProblem.Stalled))
                             break
                         }
                         val buffered = current.totalBufferedDuration

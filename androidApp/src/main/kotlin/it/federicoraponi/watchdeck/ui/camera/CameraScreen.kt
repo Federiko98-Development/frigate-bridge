@@ -36,6 +36,7 @@ import it.federicoraponi.watchdeck.ui.CameraState
 import it.federicoraponi.watchdeck.ui.CameraViewModel
 import it.federicoraponi.watchdeck.ui.ClipState
 import it.federicoraponi.watchdeck.ui.LiveState
+import it.federicoraponi.watchdeck.ui.LiveTransport
 import it.federicoraponi.watchdeck.ui.PlaybackState
 import it.federicoraponi.watchdeck.ui.PtzMove
 import it.federicoraponi.watchdeck.ui.TimelineArgs
@@ -99,8 +100,13 @@ fun CameraRoute(
             null
         }
     val captures = rememberCaptures()
+    // Still pictures are not taken from again: there is no video on screen to take from.
     val canTakePhoto =
-        if (state.mode == VideoMode.Live) state.live == LiveState.Playing else player != null
+        if (state.mode == VideoMode.Live) {
+            state.live == LiveState.Playing && state.transport != LiveTransport.Snapshots
+        } else {
+            player != null
+        }
     // A recording is named after the moment on screen, the live view after now.
     val takePhoto = {
         val live = state.mode == VideoMode.Live
@@ -131,6 +137,8 @@ fun CameraRoute(
             player = player,
             playback = recordings?.playback,
             onRetryRecording = { timeline?.retry() },
+            recordingTime = recordings?.time ?: 0,
+            loadStill = { timeline?.still(it) },
             onSkipRecording = { timeline?.skip(it) },
             onMeasures = { measures = it },
         )
@@ -151,6 +159,7 @@ fun CameraRoute(
             goToPreset = viewModel::goToPreset,
             setFeature = viewModel::setFeature,
             setLiveOnly = viewModel::setLiveOnly,
+            retryLive = viewModel::retry,
         )
     if (fullscreen) {
         BackHandler { fullscreen = false }
@@ -185,7 +194,7 @@ fun CameraRoute(
         recordings =
             if (timeline != null && recordings != null) {
                 {
-                    FullscreenButton { fullscreen = true }
+                    (recordings.playback as? PlaybackState.Stills)?.let { StillsNotice(it.failure, timeline::retry) }
                     RecordingsPanel(
                         state = recordings,
                         player = player,
@@ -201,6 +210,7 @@ fun CameraRoute(
                                 clearExport = timeline::clearExport,
                                 setSpeed = { speed = it },
                                 takePhoto = actions.takePhoto,
+                                fullscreen = { fullscreen = true },
                             ),
                     )
                 }
@@ -228,6 +238,7 @@ data class CameraActions(
     val goToPreset: (String) -> Unit = {},
     val setFeature: (CameraFeature, Boolean) -> Unit = { _, _ -> },
     val setLiveOnly: (Boolean) -> Unit = {},
+    val retryLive: () -> Unit = {},
 )
 
 /** The upright page of a camera: the video with what can be done with it underneath. */
@@ -268,13 +279,14 @@ fun CameraScreen(
             if (state.canRecord || openedOnRecordings) ModeSelector(state.mode, actions.selectMode)
             VideoFrame(video)
             if (state.mode == VideoMode.Live) {
+                LiveNotice(state, actions.retryLive)
                 LiveControls(
                     state = state,
                     muted = muted,
                     onMutedChange = actions.setMuted,
                     onSelectStream = actions.selectStream,
                     onFullscreen = actions.fullscreen,
-                    measures = measures,
+                    hasAudio = measures.hasAudio != false,
                     onPhoto = actions.takePhoto,
                     onStartClip = actions.startClip,
                     onStopClip = actions.stopClip,
@@ -295,6 +307,8 @@ fun CameraScreen(
                     canGoLiveOnly = state.clip != ClipState.Starting && state.clip !is ClipState.Recording,
                 )
             }
+            // How the live view arrives: technical details, below everything that can be done with it.
+            if (state.mode == VideoMode.Live) LiveDetails(state, measures)
         }
     }
 }

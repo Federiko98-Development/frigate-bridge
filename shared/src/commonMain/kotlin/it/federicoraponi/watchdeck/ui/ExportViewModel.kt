@@ -39,14 +39,25 @@ class ExportViewModel(
     val state: StateFlow<ExportViewState> = mutableState.asStateFlow()
     private var loadJob: Job? = null
 
+    // The video already failed once and was asked for again.
+    private var hasRetried = false
+
     init {
         load()
     }
 
-    fun retry() = load()
+    fun retry() {
+        hasRetried = false
+        load()
+    }
 
-    fun playerFailed(detail: String?) {
-        mutableState.update { it.copy(file = null, failure = VideoFailure(detail = detail)) }
+    /** The player gave up: the video is asked for once more, which also renews an ended sign-in. */
+    fun playerFailed(failure: VideoFailure) {
+        val isFirst = !hasRetried
+        hasRetried = true
+        // Without the file the player goes, and a new one is made when it is back.
+        mutableState.update { it.copy(file = null, failure = if (isFirst) null else failure) }
+        if (isFirst) load()
     }
 
     /** Removes the file from the server, for everyone. A kept moment is no longer marked as one to keep. */

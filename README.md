@@ -28,6 +28,59 @@ The iOS interface (`iosApp`, SwiftUI) will come after the Android one.
 - For administrators: users, roles with the cameras each can see, camera groups (create, edit, reorder, delete) and restarting Frigate
 - Full screen in landscape, PTZ with saved positions, and switches for detection, recording, snapshots and motion
 
+## Sign-in through an external provider
+
+Some servers sit behind a sign-in page: a proxy such as [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/)
+asks an OpenID Connect provider (Keycloak, and others) who you are. When adding such a server choose
+**External (OIDC)** and enter the provider's address (its *issuer*). You sign in in the phone's browser, so the app
+never sees your password; it keeps the provider's tokens encrypted, renews them, and asks you to sign in again when
+the provider ends the session. If you add the server with Frigate's login by mistake, the app notices the sign-in
+page and offers to switch.
+
+This needs a one-time setup by whoever runs the server. Tried with Keycloak and oauth2-proxy in front of Frigate
+0.18.3; other providers should work if they issue JWTs the proxy can check, but have not been tried.
+
+**At the provider**, register a client for the app:
+
+- a **public** client (no secret) named `watchdeck`, or any name you then type in the app;
+- authorization code flow with **PKCE**, method `S256`;
+- redirect address `it.federicoraponi.watchdeck:/oauth2redirect` (a build with another application id uses that id
+  as the scheme; the app shows the exact address);
+- the token must be meant for the proxy: in Keycloak, add to the app's client an **Audience** mapper that includes
+  the proxy's client in the access token;
+- the same claims the proxy checks, e.g. a verified e-mail and, if the proxy restricts or maps groups, a
+  **Group Membership** mapper (claim `groups`);
+- optionally the `offline_access` scope, added to the app's scopes too, for sessions that outlast the browser's.
+
+**At oauth2-proxy**, accept the tokens that apps send:
+
+```bash
+--skip-jwt-bearer-tokens=true
+```
+
+Without the audience mapper, `--extra-jwt-issuers=<issuer>=watchdeck` accepts the app's own audience instead
+(not tried). The proxy's rules about e-mail domains and groups apply to the app as to the browser.
+
+**At Frigate** nothing changes if it already trusts the proxy: its own authentication is off, and `proxy.header_map`
+tells it who the user is and their role. With Frigate's own authentication on behind the proxy, it would refuse the
+provider's token. Example with made-up values:
+
+```yaml
+auth:
+  enabled: false
+proxy:
+  header_map:
+    user: x-forwarded-preferred-username
+    role: x-forwarded-groups
+    role_map:
+      admin:
+        - admins
+  default_role: viewer
+```
+
+Video over HTTPS and recordings pass through the proxy. WebRTC does not: it needs the server's WebRTC port. When a
+way of getting video fails, the app tries the next one, down to still pictures, and says why.
+
 ## Links to an event
 
 `watchdeck://event?id=<review id>&server=<address>` opens the app on that alert or detection. The address is one

@@ -24,6 +24,9 @@ enum class LiveTransport {
 
     /** The second choice, because it needs the server's WebRTC port to be reachable. */
     WebRtc,
+
+    /** The last resort: the camera's latest picture, again and again, without sound. */
+    Snapshots,
 }
 
 sealed interface LiveState {
@@ -46,6 +49,10 @@ data class CameraState(
     /** Grows on every retry, so that the screen builds a new connection. */
     val liveAttempt: Int = 0,
     val transport: LiveTransport = LiveTransport.Https,
+    /** The stream being played or tried; another than the chosen one after a fallback. */
+    val liveStream: String? = null,
+    /** The ways that did not work since the live view was started, in order. The screen explains them. */
+    val setbacks: List<LiveSetback> = emptyList(),
     /** What to play when [transport] is HTTPS; `null` while it is being prepared. */
     val httpsStream: HttpsLiveStream? = null,
     val controls: CameraControls = CameraControls(),

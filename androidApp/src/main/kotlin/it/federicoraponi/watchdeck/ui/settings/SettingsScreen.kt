@@ -6,28 +6,44 @@ import android.os.LocaleList
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,17 +56,21 @@ import it.federicoraponi.watchdeck.settings.PreviewRefresh
 import it.federicoraponi.watchdeck.settings.ThemeMode
 import it.federicoraponi.watchdeck.ui.AccountEntry
 import it.federicoraponi.watchdeck.ui.SettingsViewModel
+import it.federicoraponi.watchdeck.ui.designsystem.ActionRow
 import it.federicoraponi.watchdeck.ui.designsystem.BackButton
 import it.federicoraponi.watchdeck.ui.designsystem.ConnectedChoice
+import it.federicoraponi.watchdeck.ui.designsystem.ControlGroup
 import it.federicoraponi.watchdeck.ui.designsystem.ListGroup
 import it.federicoraponi.watchdeck.ui.designsystem.ScreenTitle
 import it.federicoraponi.watchdeck.ui.designsystem.ShapedIcon
+import it.federicoraponi.watchdeck.ui.designsystem.SheetTitle
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
 import it.federicoraponi.watchdeck.ui.designsystem.Symbols
+import it.federicoraponi.watchdeck.ui.designsystem.rememberFullSheetState
 import it.federicoraponi.watchdeck.ui.theme.WatchdeckTheme
 import org.koin.androidx.compose.koinViewModel
 
-private const val ADMIN_PAGES = 5
+private val TILE_INNER_CORNER = 4.dp
 private const val SOURCE_URL = "https://github.com/Federiko98-Development/watchdeck"
 private const val PRIVACY_URL = "$SOURCE_URL/blob/main/PRIVACY.md"
 
@@ -128,6 +148,8 @@ fun SettingsScreen(
     onBack: (() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
 ) {
+    // Saved, so that it stays open when changing the language or the theme draws the screen anew.
+    var open by rememberSaveable { mutableStateOf<SettingsPanel?>(null) }
     Scaffold(
         modifier = modifier,
         bottomBar = bottomBar,
@@ -151,89 +173,308 @@ fun SettingsScreen(
                     .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            Appearance(settings, actions)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Language()
-            Cameras(settings, actions)
-            Security(settings.appLock, canLock, actions.setAppLock)
-            // What concerns the active server is in one group, whoever is signed in.
-            (account?.serverName ?: managedServer)?.let {
-                ThisServer(it, account, isManaged = managedServer != null, actions)
-            }
-            Servers(actions.manageServers)
+            // What concerns the active server comes first, as tiles: everything is in sight without scrolling.
+            ServerTiles(account?.serverName ?: managedServer, account, isManaged = managedServer != null, actions)
+            Preferences(settings, canLock, actions.setAppLock, onOpen = { open = it })
             About()
+        }
+    }
+    when (open) {
+        SettingsPanel.Appearance ->
+            SettingsSheet(R.string.settings_appearance, { open = null }) {
+                Appearance(settings, actions)
+            }
+        SettingsPanel.Cameras ->
+            SettingsSheet(R.string.settings_cameras, { open = null }) {
+                Cameras(settings, actions)
+            }
+        null -> Unit
+    }
+}
+
+/** The groups of preferences that open in a sheet. */
+private enum class SettingsPanel {
+    Appearance,
+    Cameras,
+}
+
+@Composable
+private fun SettingsSheet(
+    title: Int,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberFullSheetState()) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Spacing.lg)
+                    .padding(bottom = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+        ) {
+            SheetTitle(stringResource(title), modifier = Modifier.padding(start = Spacing.sm, bottom = Spacing.md))
+            content()
         }
     }
 }
 
+/** Theme, dynamic colour and, where Android keeps one per app, the language. */
 @Composable
 private fun Appearance(
     settings: AppSettings,
     actions: SettingsActions,
 ) {
-    // Dynamic colour needs Android 12.
+    // Dynamic colour needs Android 12, a language for the app Android 13.
     val hasDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val count = if (hasDynamicColor) 2 else 1
-    ListGroup(title = stringResource(R.string.settings_appearance)) {
-        ChoiceItem(
-            title = stringResource(R.string.settings_theme),
-            icon = Symbols.DarkMode,
-            options =
-                listOf(
-                    ThemeMode.System to stringResource(R.string.settings_system),
-                    ThemeMode.Light to stringResource(R.string.settings_theme_light),
-                    ThemeMode.Dark to stringResource(R.string.settings_theme_dark),
-                ),
-            selected = settings.themeMode,
-            onSelect = actions.setThemeMode,
-            index = 0,
+    val hasLanguage = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val count = 1 + (if (hasDynamicColor) 1 else 0) + (if (hasLanguage) 1 else 0)
+    ChoiceItem(
+        title = stringResource(R.string.settings_theme),
+        icon = Symbols.DarkMode,
+        options =
+            listOf(
+                ThemeMode.System to stringResource(R.string.settings_system),
+                ThemeMode.Light to stringResource(R.string.settings_theme_light),
+                ThemeMode.Dark to stringResource(R.string.settings_theme_dark),
+            ),
+        selected = settings.themeMode,
+        onSelect = actions.setThemeMode,
+        index = 0,
+        count = count,
+    )
+    if (hasDynamicColor) {
+        SwitchItem(
+            title = stringResource(R.string.settings_dynamic_color),
+            icon = Symbols.Palette,
+            description = stringResource(R.string.settings_dynamic_color_hint),
+            checked = settings.dynamicColor,
+            onCheckedChange = actions.setDynamicColor,
+            index = 1,
             count = count,
         )
-        if (hasDynamicColor) {
-            SwitchItem(
-                title = stringResource(R.string.settings_dynamic_color),
-                icon = Symbols.Palette,
-                description = stringResource(R.string.settings_dynamic_color_hint),
-                checked = settings.dynamicColor,
-                onCheckedChange = actions.setDynamicColor,
-                index = 1,
-                count = count,
-            )
-        }
     }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Language(index = count - 1, count = count)
 }
 
 // The language is kept by Android, which also offers it in the system settings.
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-private fun Language() {
+private fun Language(
+    index: Int,
+    count: Int,
+) {
     val manager = LocalContext.current.getSystemService(LocaleManager::class.java)
     val current = manager.applicationLocales.toLanguageTags().substringBefore('-')
-    ListGroup(title = stringResource(R.string.settings_language)) {
-        ChoiceItem(
-            title = stringResource(R.string.settings_app_language),
-            icon = Symbols.Language,
-            options =
-                listOf(
-                    "" to stringResource(R.string.settings_system),
-                    "en" to "English",
-                    // Each language is written in itself.
-                    "it" to "Italiano",
-                ),
-            selected = current,
-            onSelect = { manager.applicationLocales = LocaleList.forLanguageTags(it) },
-            index = 0,
-            count = 1,
-        )
-    }
+    ChoiceItem(
+        title = stringResource(R.string.settings_app_language),
+        icon = Symbols.Language,
+        options =
+            listOf(
+                "" to stringResource(R.string.settings_system),
+                "en" to "English",
+                // Each language is written in itself.
+                "it" to "Italiano",
+            ),
+        selected = current,
+        onSelect = { manager.applicationLocales = LocaleList.forLanguageTags(it) },
+        index = index,
+        count = count,
+    )
 }
 
 @Composable
-private fun Security(
-    isLocked: Boolean,
-    canLock: Boolean,
-    onChange: (Boolean) -> Unit,
+private fun Cameras(
+    settings: AppSettings,
+    actions: SettingsActions,
 ) {
-    ListGroup(title = stringResource(R.string.settings_security)) {
+    ChoiceItem(
+        title = stringResource(R.string.settings_layout),
+        icon = Symbols.Dashboard,
+        options =
+            listOf(
+                HomeLayout.Grid to stringResource(R.string.settings_layout_grid),
+                HomeLayout.List to stringResource(R.string.settings_layout_list),
+            ),
+        selected = settings.homeLayout,
+        onSelect = actions.setHomeLayout,
+        index = 0,
+        count = 4,
+    )
+    ChoiceItem(
+        title = stringResource(R.string.settings_group_buttons),
+        icon = Symbols.Label,
+        options =
+            listOf(
+                GroupButtons.Names to stringResource(R.string.settings_group_buttons_names),
+                GroupButtons.Icons to stringResource(R.string.settings_group_buttons_icons),
+            ),
+        selected = settings.groupButtons,
+        onSelect = actions.setGroupButtons,
+        index = 1,
+        count = 4,
+    )
+    ChoiceItem(
+        title = stringResource(R.string.settings_previews),
+        icon = Symbols.Autorenew,
+        options =
+            listOf(
+                PreviewRefresh.Fast to stringResource(R.string.settings_previews_fast),
+                PreviewRefresh.Slow to stringResource(R.string.settings_previews_slow),
+                PreviewRefresh.OnOpen to stringResource(R.string.settings_previews_once),
+            ),
+        selected = settings.previewRefresh,
+        onSelect = actions.setPreviewRefresh,
+        index = 2,
+        count = 4,
+    )
+    SwitchItem(
+        title = stringResource(R.string.settings_save_data),
+        icon = Symbols.DataSaverOn,
+        description = stringResource(R.string.settings_save_data_hint),
+        checked = settings.savePreviewData,
+        onCheckedChange = actions.setSavePreviewData,
+        index = 3,
+        count = 4,
+    )
+}
+
+/** The active server's pages, and the list of servers, two to a row. */
+@Composable
+private fun ServerTiles(
+    name: String?,
+    account: AccountEntry?,
+    isManaged: Boolean,
+    actions: SettingsActions,
+) {
+    val tiles =
+        buildList {
+            if (isManaged) {
+                add(Tile(R.string.status_title, Symbols.MonitorHeart, actions.openStatus))
+                add(Tile(R.string.saved_title, Symbols.Bookmark, actions.openSaved))
+                add(Tile(R.string.exports_title, Symbols.VideoLibrary, actions.openExports))
+                add(Tile(R.string.access_title, Symbols.Group, actions.openAccess))
+                add(Tile(R.string.group_title, Symbols.Category, actions.openCameraGroups))
+            }
+            if (account != null) {
+                add(Tile(R.string.password_change_title, Symbols.Key, actions.changePassword, account.username))
+            }
+            add(Tile(R.string.settings_manage_servers, Symbols.Dns, actions.manageServers))
+        }
+    ListGroup(title = name ?: stringResource(R.string.servers_title)) {
+        // As in a segmented list, only the corners of the whole group are fully round.
+        val rows = tiles.chunked(2)
+        rows.forEachIndexed { row, pair ->
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            ) {
+                pair.forEachIndexed { column, tile ->
+                    val outer = MaterialTheme.shapes.large.topStart
+                    val small = CornerSize(TILE_INNER_CORNER)
+                    val isLast = row == rows.lastIndex
+                    val isFirstColumn = column == 0
+                    val isLastColumn = column == pair.lastIndex
+                    TileButton(
+                        tile,
+                        shape =
+                            RoundedCornerShape(
+                                topStart = if (row == 0 && isFirstColumn) outer else small,
+                                topEnd = if (row == 0 && isLastColumn) outer else small,
+                                bottomEnd = if (isLast && isLastColumn) outer else small,
+                                bottomStart = if (isLast && isFirstColumn) outer else small,
+                            ),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private class Tile(
+    val title: Int,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+    val detail: String? = null,
+)
+
+@Composable
+private fun TileButton(
+    tile: Tile,
+    shape: Shape,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = tile.onClick,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier.heightIn(min = 56.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ShapedIcon(tile.icon, size = 36.dp)
+            Column {
+                Text(stringResource(tile.title), style = MaterialTheme.typography.titleSmall)
+                tile.detail?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The app's own preferences: one row for each group, saying what is chosen. */
+@Composable
+private fun Preferences(
+    settings: AppSettings,
+    canLock: Boolean,
+    onLockChange: (Boolean) -> Unit,
+    onOpen: (SettingsPanel) -> Unit,
+) {
+    val theme =
+        stringResource(
+            when (settings.themeMode) {
+                ThemeMode.System -> R.string.settings_system
+                ThemeMode.Light -> R.string.settings_theme_light
+                ThemeMode.Dark -> R.string.settings_theme_dark
+            },
+        )
+    val layout =
+        stringResource(
+            if (settings.homeLayout == HomeLayout.Grid) {
+                R.string.settings_layout_grid
+            } else {
+                R.string.settings_layout_list
+            },
+        )
+    ListGroup(title = stringResource(R.string.settings_app)) {
+        LinkItem(
+            title = stringResource(R.string.settings_appearance),
+            icon = Symbols.Palette,
+            description = stringResource(R.string.settings_appearance_summary, theme),
+            onClick = { onOpen(SettingsPanel.Appearance) },
+            index = 0,
+            count = 3,
+        )
+        LinkItem(
+            title = stringResource(R.string.settings_cameras),
+            icon = Symbols.Dashboard,
+            description = stringResource(R.string.settings_cameras_summary, layout),
+            onClick = { onOpen(SettingsPanel.Cameras) },
+            index = 1,
+            count = 3,
+        )
         SwitchItem(
             title = stringResource(R.string.settings_app_lock),
             icon = Symbols.Lock,
@@ -242,152 +483,15 @@ private fun Security(
                     if (canLock) R.string.settings_app_lock_hint else R.string.settings_app_lock_unavailable,
                 ),
             // Without a screen lock the app cannot be locked, whatever was saved.
-            checked = isLocked && canLock,
-            onCheckedChange = { if (canLock) onChange(it) },
-            index = 0,
-            count = 1,
-        )
-    }
-}
-
-@Composable
-private fun Cameras(
-    settings: AppSettings,
-    actions: SettingsActions,
-) {
-    ListGroup(title = stringResource(R.string.settings_cameras)) {
-        ChoiceItem(
-            title = stringResource(R.string.settings_layout),
-            icon = Symbols.Dashboard,
-            options =
-                listOf(
-                    HomeLayout.Grid to stringResource(R.string.settings_layout_grid),
-                    HomeLayout.List to stringResource(R.string.settings_layout_list),
-                ),
-            selected = settings.homeLayout,
-            onSelect = actions.setHomeLayout,
-            index = 0,
-            count = 4,
-        )
-        ChoiceItem(
-            title = stringResource(R.string.settings_group_buttons),
-            icon = Symbols.Label,
-            options =
-                listOf(
-                    GroupButtons.Names to stringResource(R.string.settings_group_buttons_names),
-                    GroupButtons.Icons to stringResource(R.string.settings_group_buttons_icons),
-                ),
-            selected = settings.groupButtons,
-            onSelect = actions.setGroupButtons,
-            index = 1,
-            count = 4,
-        )
-        ChoiceItem(
-            title = stringResource(R.string.settings_previews),
-            icon = Symbols.Autorenew,
-            options =
-                listOf(
-                    PreviewRefresh.Fast to stringResource(R.string.settings_previews_fast),
-                    PreviewRefresh.Slow to stringResource(R.string.settings_previews_slow),
-                    PreviewRefresh.OnOpen to stringResource(R.string.settings_previews_once),
-                ),
-            selected = settings.previewRefresh,
-            onSelect = actions.setPreviewRefresh,
+            checked = settings.appLock && canLock,
+            onCheckedChange = { if (canLock) onLockChange(it) },
             index = 2,
-            count = 4,
-        )
-        SwitchItem(
-            title = stringResource(R.string.settings_save_data),
-            icon = Symbols.DataSaverOn,
-            description = stringResource(R.string.settings_save_data_hint),
-            checked = settings.savePreviewData,
-            onCheckedChange = actions.setSavePreviewData,
-            index = 3,
-            count = 4,
+            count = 3,
         )
     }
 }
 
-@Composable
-private fun Servers(onManage: () -> Unit) {
-    ListGroup(title = stringResource(R.string.servers_title)) {
-        LinkItem(
-            title = stringResource(R.string.settings_manage_servers),
-            icon = Symbols.Dns,
-            description = stringResource(R.string.settings_manage_servers_hint),
-            onClick = onManage,
-            index = 0,
-            count = 1,
-        )
-    }
-}
-
-@Composable
-private fun ThisServer(
-    name: String,
-    account: AccountEntry?,
-    isManaged: Boolean,
-    actions: SettingsActions,
-) {
-    // The password comes first, for those who have one; the administrator's pages follow.
-    val first = if (account == null) 0 else 1
-    val count = first + if (isManaged) ADMIN_PAGES else 0
-    ListGroup(title = name) {
-        if (account != null) {
-            LinkItem(
-                title = stringResource(R.string.password_change_title),
-                icon = Symbols.Key,
-                description = stringResource(R.string.password_signed_in_as, account.username),
-                onClick = actions.changePassword,
-                index = 0,
-                count = count,
-            )
-        }
-        if (isManaged) {
-            LinkItem(
-                title = stringResource(R.string.status_title),
-                icon = Symbols.MonitorHeart,
-                description = stringResource(R.string.status_hint),
-                onClick = actions.openStatus,
-                index = first,
-                count = count,
-            )
-            LinkItem(
-                title = stringResource(R.string.saved_title),
-                icon = Symbols.Bookmark,
-                description = stringResource(R.string.saved_hint),
-                onClick = actions.openSaved,
-                index = first + 1,
-                count = count,
-            )
-            LinkItem(
-                title = stringResource(R.string.exports_title),
-                icon = Symbols.VideoLibrary,
-                description = stringResource(R.string.exports_hint),
-                onClick = actions.openExports,
-                index = first + 2,
-                count = count,
-            )
-            LinkItem(
-                title = stringResource(R.string.access_title),
-                icon = Symbols.Group,
-                description = stringResource(R.string.access_hint),
-                onClick = actions.openAccess,
-                index = first + 3,
-                count = count,
-            )
-            LinkItem(
-                title = stringResource(R.string.group_title),
-                icon = Symbols.Category,
-                description = stringResource(R.string.group_hint),
-                onClick = actions.openCameraGroups,
-                index = first + 4,
-                count = count,
-            )
-        }
-    }
-}
-
+/** The source and the privacy policy, with the version, at the foot of the page. */
 @Composable
 private fun About() {
     val context = LocalContext.current
@@ -397,22 +501,20 @@ private fun About() {
             .getPackageInfo(context.packageName, 0)
             .versionName
             .orEmpty()
-    ListGroup(title = stringResource(R.string.settings_about)) {
-        LinkItem(
-            title = stringResource(R.string.settings_source),
-            icon = Symbols.Code,
-            description = stringResource(R.string.settings_about_hint, version),
-            onClick = { uriHandler.openUri(SOURCE_URL) },
-            index = 0,
-            count = 2,
-        )
-        LinkItem(
-            title = stringResource(R.string.settings_privacy),
-            icon = Symbols.Shield,
-            description = stringResource(R.string.settings_privacy_hint),
-            onClick = { uriHandler.openUri(PRIVACY_URL) },
-            index = 1,
-            count = 2,
+    ControlGroup {
+        ActionRow {
+            TextButton(onClick = { uriHandler.openUri(SOURCE_URL) }, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(R.string.settings_source))
+            }
+            TextButton(onClick = { uriHandler.openUri(PRIVACY_URL) }, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(R.string.settings_privacy))
+            }
+        }
+        Text(
+            stringResource(R.string.settings_about_hint, version),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }

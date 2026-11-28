@@ -1,7 +1,10 @@
 package it.federicoraponi.watchdeck.di
 
+import it.federicoraponi.watchdeck.auth.OidcClient
+import it.federicoraponi.watchdeck.auth.OidcSignIn
 import it.federicoraponi.watchdeck.server.DataStoreServerStore
 import it.federicoraponi.watchdeck.server.ExportDownloads
+import it.federicoraponi.watchdeck.server.HttpClientFactory
 import it.federicoraponi.watchdeck.server.ServerRegistry
 import it.federicoraponi.watchdeck.server.ServerSessionFactory
 import it.federicoraponi.watchdeck.server.ServerStore
@@ -30,12 +33,17 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 val sharedModule =
     module {
         single<ServerStore> { DataStoreServerStore(get()) }
         single<SettingsStore> { DataStoreSettingsStore(get()) }
-        single { ServerSessionFactory(get(), get()) }
+        // Providers are reached with the certificates the phone trusts, never with one accepted for a server.
+        single { OidcClient(lazy { get<HttpClientFactory>().create(null) }, ::epochSeconds) }
+        single { OidcSignIn(get(), get()) }
+        single { ServerSessionFactory(get(), get(), get(), ::epochSeconds) }
         single { ServerRegistry(get(), get(), get()) }
         single { ExportDownloads(get()) }
         viewModelOf(::StartViewModel)
@@ -51,11 +59,14 @@ val sharedModule =
         viewModel { parameters -> ExportViewModel(parameters.get(), get()) }
         viewModelOf(::LockViewModel)
         viewModelOf(::EventsViewModel)
-        viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get()) }
+        viewModel { parameters -> ServerFormViewModel(parameters.get(), get(), get(), get()) }
         viewModel { parameters -> CameraViewModel(parameters.get(), get(), get(), get()) }
         viewModel { parameters -> TimelineViewModel(parameters.get(), get(), get()) }
         viewModel { parameters -> EventViewModel(parameters.get(), get(), get()) }
     }
+
+@OptIn(ExperimentalTime::class)
+private fun epochSeconds(): Long = Clock.System.now().epochSeconds
 
 /** Starts Koin. Call it once, when the app launches. */
 fun initKoin(appDeclaration: KoinAppDeclaration = {}): KoinApplication =

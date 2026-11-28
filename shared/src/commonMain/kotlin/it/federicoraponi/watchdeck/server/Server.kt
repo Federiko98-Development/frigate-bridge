@@ -1,5 +1,7 @@
 package it.federicoraponi.watchdeck.server
 
+import it.federicoraponi.watchdeck.auth.OidcSettings
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -19,6 +21,23 @@ data class Server(
     val username: String = "",
     val colorIndex: Int = 0,
     val certificateSha256: String? = null,
+    val signIn: ServerSignIn = ServerSignIn.Password,
 ) {
     val addresses: List<String> get() = listOfNotNull(url, alternativeUrl)
+}
+
+/** Who signs the users of a server in. Another way of signing in is another kind here, with its authenticator. */
+@Serializable
+sealed interface ServerSignIn {
+    /** Frigate's own login, with the server's user name and password; also servers that ask for none. */
+    @Serializable
+    @SerialName("password")
+    data object Password : ServerSignIn
+
+    /** A proxy in front of Frigate that accepts the tokens of an OpenID Connect provider. */
+    @Serializable
+    @SerialName("oidc")
+    data class Oidc(
+        val settings: OidcSettings,
+    ) : ServerSignIn
 }

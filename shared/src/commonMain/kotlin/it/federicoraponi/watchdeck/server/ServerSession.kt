@@ -9,14 +9,13 @@ import it.federicoraponi.watchdeck.camera.cameraCatalog
 import it.federicoraponi.watchdeck.camera.groupChange
 import it.federicoraponi.watchdeck.camera.groupOrderChange
 import it.federicoraponi.watchdeck.camera.groupRemoval
-import it.federicoraponi.watchdeck.frigate.Credentials
+import it.federicoraponi.watchdeck.frigate.Authenticator
 import it.federicoraponi.watchdeck.frigate.ExportDto
 import it.federicoraponi.watchdeck.frigate.FrigateApi
 import it.federicoraponi.watchdeck.frigate.FrigateError
 import it.federicoraponi.watchdeck.frigate.FrigateSocket
 import it.federicoraponi.watchdeck.frigate.PtzInfoDto
 import it.federicoraponi.watchdeck.frigate.ReviewDto
-import it.federicoraponi.watchdeck.frigate.TokenStore
 import it.federicoraponi.watchdeck.frigate.isSupportedFrigateVersion
 import it.federicoraponi.watchdeck.recordings.ExportItem
 import it.federicoraponi.watchdeck.recordings.RecordingDay
@@ -54,17 +53,22 @@ data class ServerSnapshot(
     val authEnabled: Boolean = true,
 )
 
+/** The headers a player sends with its requests to a server, as they are at the moment of each request. */
+fun interface MediaAuthorization {
+    suspend fun headers(): Map<String, String>
+}
+
 /** What a player needs to show a live stream carried over HTTPS. */
 data class HttpsLiveStream(
     val url: String,
-    val headers: Map<String, String>,
+    val authorization: MediaAuthorization,
     val certificateSha256: String?,
 )
 
 /** What a player needs to show a recorded interval, with times in seconds since the epoch. */
 data class RecordingClip(
     val url: String,
-    val headers: Map<String, String>,
+    val authorization: MediaAuthorization,
     /** The certificate accepted for the server, which the player must accept too. */
     val certificateSha256: String?,
     val startTime: Long,
@@ -78,7 +82,7 @@ data class ExportedFile(
     val path: String,
     val url: String,
     val fileName: String,
-    val headers: Map<String, String>,
+    val authorization: MediaAuthorization,
     val certificateSha256: String?,
 )
 
@@ -130,12 +134,11 @@ sealed interface ConnectionState {
 class ServerSession(
     val server: Server,
     private val http: HttpClient,
-    credentials: suspend () -> Credentials?,
-    private val tokens: TokenStore,
+    private val authenticator: Authenticator,
     /** Saves a new password of the signed-in user, for the logins to come. */
     private val storePassword: suspend (String) -> Unit = {},
 ) {
-    private val apis = server.addresses.map { url -> url to FrigateApi(http, url, credentials, tokens) }
+    private val apis = server.addresses.map { url -> url to FrigateApi(http, url, authenticator) }
     private val refreshMutex = Mutex()
     private val socketMutex = Mutex()
     private var socket: FrigateSocket? = null
@@ -185,7 +188,9 @@ class ServerSession(
 
     suspend fun httpsLiveStream(stream: String): HttpsLiveStream {
         val api = connectedApi()
-        return HttpsLiveStream(api.mp4StreamUrl(stream), api.authorizationHeaders(), server.certificateSha256)
+        // Asks the server first, so that a failure to sign in is told apart from a failure of the video.
+        api.version()
+        return HttpsLiveStream(api.mp4StreamUrl(stream), mediaAuthorization(api), server.certificateSha256)
     }
 
     /** Turns a camera function on or off and reads the server again. */
@@ -284,6 +289,13 @@ class ServerSession(
             RecordingSegment(it.startTime, it.endTime, it.duration ?: (it.endTime - it.startTime))
         }
 
+    /** The recorded picture of a camera at a moment, in seconds since the epoch. */
+    suspend fun recordingStill(
+        camera: String,
+        time: Long,
+        height: Int,
+    ): ByteArray = connectedApi().recordingStill(camera, time, height)
+
     /** What a player needs for the video of an interval of recordings. */
     suspend fun recordingClip(
         camera: String,
@@ -291,9 +303,10 @@ class ServerSession(
         end: Long,
     ): RecordingClip {
         val api = connectedApi()
+        api.version()
         return RecordingClip(
             url = api.recordingPlaylistUrl(camera, start, end),
-            headers = api.authorizationHeaders(),
+            authorization = mediaAuthorization(api),
             certificateSha256 = server.certificateSha256,
             startTime = start,
             endTime = end,
@@ -379,7 +392,7 @@ class ServerSession(
             path = export.videoPath,
             url = api.mediaUrl(export.videoPath),
             fileName = export.videoPath.substringAfterLast('/'),
-            headers = api.authorizationHeaders(),
+            authorization = mediaAuthorization(api),
             certificateSha256 = server.certificateSha256,
         )
     }
@@ -402,12 +415,13 @@ class ServerSession(
     /** Where to play or download an export from. */
     suspend fun fileOf(export: ExportItem): ExportedFile {
         val api = connectedApi()
+        api.version()
         return ExportedFile(
             serverId = server.id,
             path = export.videoPath,
             url = api.mediaUrl(export.videoPath),
             fileName = export.videoPath.substringAfterLast('/'),
-            headers = api.authorizationHeaders(),
+            authorization = mediaAuthorization(api),
             certificateSha256 = server.certificateSha256,
         )
     }
@@ -479,7 +493,7 @@ class ServerSession(
         withContext(NonCancellable) {
             val token = api.setPassword(username, new, current)
             storePassword(new)
-            if (token != null) tokens.write(token)
+            if (token != null) authenticator.adopt(token)
             apis.forEach { it.second.resetLoginFailure() }
         }
     }
@@ -538,8 +552,7 @@ class ServerSession(
 
     /** Drops the session token and reads the server again, e.g. after this user's role changed. */
     suspend fun signInAgain() {
-        tokens.write(null)
-        apis.forEach { it.second.resetLoginFailure() }
+        authenticator.invalidate()
         refresh()
     }
 
@@ -563,6 +576,12 @@ class ServerSession(
         background.cancel()
         http.close()
     }
+
+    // One for each address, so that two descriptions of the same video are equal and a player is not rebuilt.
+    private val authorizations = mutableMapOf<FrigateApi, MediaAuthorization>()
+
+    private fun mediaAuthorization(api: FrigateApi): MediaAuthorization =
+        authorizations.getOrPut(api) { MediaAuthorization { api.currentHeaders() } }
 
     /** The client of the address that answered, connecting first if needed. */
     private suspend fun connectedApi(): FrigateApi {

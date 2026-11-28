@@ -4,9 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -19,15 +16,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.media3.common.Player
 import it.federicoraponi.watchdeck.R
+import it.federicoraponi.watchdeck.ui.ExportState
 import it.federicoraponi.watchdeck.ui.TimelineState
+import it.federicoraponi.watchdeck.ui.camera.FullscreenButton
 import it.federicoraponi.watchdeck.ui.camera.RecordingTransport
 import it.federicoraponi.watchdeck.ui.camera.VideoSeekBar
+import it.federicoraponi.watchdeck.ui.capture.TakePhotoButton
+import it.federicoraponi.watchdeck.ui.designsystem.ActionRow
 import it.federicoraponi.watchdeck.ui.designsystem.ConnectedChoice
+import it.federicoraponi.watchdeck.ui.designsystem.ControlGroup
 import it.federicoraponi.watchdeck.ui.designsystem.PrimaryButton
 import it.federicoraponi.watchdeck.ui.designsystem.SheetTitle
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
@@ -50,9 +51,10 @@ data class RecordingsActions(
     val setSpeed: (Float) -> Unit = {},
     /** `null` while there is no picture to take. */
     val takePhoto: (() -> Unit)? = null,
+    val fullscreen: () -> Unit = {},
 )
 
-/** Everything below the video of the recordings: date, timeline, transport, speed and export. */
+/** Everything below the video of the recordings: date and full screen, timeline, transport, photo and export. */
 @Composable
 fun RecordingsPanel(
     state: TimelineState,
@@ -67,47 +69,59 @@ fun RecordingsPanel(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.lg),
     ) {
-        // Nothing to show until the days with recordings are known.
+        // Full screen is there before the days with recordings are known, the day only once they are.
+        ActionRow {
+            state.day?.let { day ->
+                DaySelector(
+                    selected = day.date,
+                    available = state.days.map { it.date },
+                    onSelect = actions.selectDay,
+                )
+            }
+            FullscreenButton(actions.fullscreen)
+        }
         state.day?.let { day ->
-            DaySelector(
-                selected = day.date,
-                available = state.days.map { it.date },
-                onSelect = actions.selectDay,
-            )
-            TimelineBar(
-                day = day,
-                ranges = state.ranges,
-                markers = state.markers,
-                time = state.time,
-                zoom = zoom,
-                onSeek = actions.seekTo,
-            )
-            ConnectedChoice(
-                labels =
-                    listOf(
-                        stringResource(R.string.zoom_minutes),
-                        stringResource(R.string.zoom_hour),
-                        stringResource(R.string.zoom_hours),
-                    ),
-                selected = zoom.ordinal,
-                onSelect = { zoom = TimelineZoom.entries[it] },
-            )
+            // Where the video is in the day, and how much of the day the strip shows.
+            ControlGroup {
+                TimelineBar(
+                    day = day,
+                    ranges = state.ranges,
+                    markers = state.markers,
+                    time = state.time,
+                    zoom = zoom,
+                    onSeek = actions.seekTo,
+                )
+                ConnectedChoice(
+                    labels =
+                        listOf(
+                            stringResource(R.string.zoom_minutes),
+                            stringResource(R.string.zoom_hour),
+                            stringResource(R.string.zoom_hours),
+                        ),
+                    selected = zoom.ordinal,
+                    onSelect = { zoom = TimelineZoom.entries[it] },
+                )
+            }
             // Nothing to move through on a day without recordings.
             if (state.ranges.isNotEmpty()) {
-                VideoSeekBar(player, onSeeked = actions.scrubbed)
-                RecordingTransport(player, onSkip = actions.skip)
-                ConnectedChoice(
-                    labels = playbackSpeeds.map { "${it.toInt()}×" },
-                    selected = playbackSpeeds.indexOf(speed),
-                    onSelect = { actions.setSpeed(playbackSpeeds[it]) },
-                )
-                actions.takePhoto?.let { take ->
-                    FilledTonalButton(onClick = take, shapes = ButtonDefaults.shapes()) {
-                        Icon(painterResource(R.drawable.symbol_photo_camera), contentDescription = null)
-                        Text(stringResource(R.string.photo_take), modifier = Modifier.padding(start = Spacing.sm))
+                ControlGroup {
+                    VideoSeekBar(player, onSeeked = actions.scrubbed)
+                    RecordingTransport(player, onSkip = actions.skip)
+                    ConnectedChoice(
+                        labels = playbackSpeeds.map { "${it.toInt()}×" },
+                        selected = playbackSpeeds.indexOf(speed),
+                        onSelect = { actions.setSpeed(playbackSpeeds[it]) },
+                    )
+                }
+                // What can be kept from the video. An export under way takes the place of its button, underneath.
+                val canExport = state.export == ExportState.None
+                if (actions.takePhoto != null || canExport) {
+                    ActionRow {
+                        actions.takePhoto?.let { TakePhotoButton(it) }
+                        if (canExport) ExportButton(onChoose = { choosingExport = true })
                     }
                 }
-                ExportSection(state.export, onChoose = { choosingExport = true }, onDone = actions.clearExport)
+                ExportStatus(state.export, onDone = actions.clearExport)
             }
         }
     }

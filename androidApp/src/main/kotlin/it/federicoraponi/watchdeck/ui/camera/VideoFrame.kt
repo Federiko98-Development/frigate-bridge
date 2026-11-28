@@ -30,7 +30,7 @@ import it.federicoraponi.watchdeck.R
 import it.federicoraponi.watchdeck.ui.VideoFailure
 import it.federicoraponi.watchdeck.ui.designsystem.PrimaryButton
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
-import it.federicoraponi.watchdeck.ui.designsystem.problemText
+import it.federicoraponi.watchdeck.ui.designsystem.reasonText
 
 /** The black 16:9 area that every video and its messages share. */
 @Composable
@@ -77,13 +77,7 @@ internal fun Failure(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        val problem = failure.problem
-        val text =
-            when {
-                isOffline -> stringResource(R.string.offline_title)
-                problem != null -> problemText(problem)
-                else -> stringResource(fallback)
-            }
+        val text = if (isOffline) stringResource(R.string.offline_title) else reasonText(failure, fallback)
         OverVideo(text, announce = true)
         failure.detail?.takeUnless { isOffline }?.let {
             Text(it, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 3)

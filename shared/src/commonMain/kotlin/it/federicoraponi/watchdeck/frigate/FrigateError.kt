@@ -24,6 +24,32 @@ sealed class FrigateError(
         val sha256Fingerprint: String,
     ) : FrigateError("Untrusted certificate")
 
+    /**
+     * The server is set up for Frigate's login, but something in front of it asks to sign in somewhere else,
+     * at [loginUrl], which is empty when the proxy does not tell it.
+     */
+    class ExternalSignIn(
+        val loginUrl: String,
+    ) : FrigateError("The server signs users in through another provider")
+
+    /** The session at the external provider has ended, or never started: the user must sign in in the browser. */
+    class SignInRequired : FrigateError("Signing in again is needed")
+
+    /**
+     * The user signed in, but the server does not accept the app's token: its proxy is not set up to take it, or
+     * does not let this user in.
+     */
+    class SignInRefused(
+        val status: Int,
+    ) : FrigateError("The server does not accept the sign-in (HTTP $status)")
+
+    /** Signing in at the external provider did not work. [detail] is its own explanation. */
+    class ProviderFailed(
+        val reason: ProviderFailure,
+        val detail: String?,
+        cause: Throwable? = null,
+    ) : FrigateError(listOfNotNull("Sign-in failed: $reason", detail).joinToString(": "), cause)
+
     /** The server answered with something that is not a valid Frigate response. */
     class UnexpectedResponse(
         val detail: String,
@@ -33,6 +59,17 @@ sealed class FrigateError(
         /** Frigate's own explanation: the `message` or `detail` field of its JSON answer. */
         val serverMessage: String? = null,
     ) : FrigateError("Unexpected response: $detail", cause)
+}
+
+enum class ProviderFailure {
+    Unreachable,
+
+    /** The settings of the app or of the provider do not match. */
+    Misconfigured,
+
+    /** The user gave up, or the provider refused them. */
+    Cancelled,
+    NoBrowser,
 }
 
 /** Implemented by the platform exception that a TLS handshake throws for an untrusted certificate. */

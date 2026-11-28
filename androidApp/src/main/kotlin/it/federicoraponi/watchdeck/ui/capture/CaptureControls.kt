@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
@@ -35,6 +37,15 @@ import kotlinx.coroutines.delay
 fun PhotoButton(onClick: () -> Unit) {
     FilledTonalIconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
         Icon(painterResource(R.drawable.symbol_photo_camera), contentDescription = stringResource(R.string.photo_take))
+    }
+}
+
+/** The same as [PhotoButton], with its name written: for rows of labelled buttons. */
+@Composable
+fun TakePhotoButton(onClick: () -> Unit) {
+    FilledTonalButton(onClick = onClick, shapes = ButtonDefaults.shapes()) {
+        Icon(painterResource(R.drawable.symbol_photo_camera), contentDescription = null)
+        Text(stringResource(R.string.photo_take), modifier = Modifier.padding(start = Spacing.sm))
     }
 }
 

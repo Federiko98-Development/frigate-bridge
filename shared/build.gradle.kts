@@ -45,6 +45,8 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
             implementation(libs.androidx.datastore.preferences)
+            // SHA-256 for the sign-in through an external provider.
+            implementation(libs.okio)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)

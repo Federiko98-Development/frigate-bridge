@@ -7,6 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
+import it.federicoraponi.watchdeck.server.MediaAuthorization
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -44,7 +45,7 @@ private sealed interface Incoming {
 @OptIn(UnstableApi::class)
 class WebSocketDataSource(
     private val http: OkHttpClient,
-    private val headers: Map<String, String>,
+    private val authorization: MediaAuthorization,
 ) : BaseDataSource(true) {
     private val incoming = LinkedBlockingQueue<Incoming>()
     private var socket: WebSocket? = null
@@ -57,7 +58,7 @@ class WebSocketDataSource(
         uri = dataSpec.uri
         transferInitializing(dataSpec)
         val request = Request.Builder().url(dataSpec.uri.toString())
-        headers.forEach { (name, value) -> request.header(name, value) }
+        authorization.headersNow().forEach { (name, value) -> request.header(name, value) }
         socket = http.newWebSocket(request.build(), Listener())
         transferStarted(dataSpec)
         return C.LENGTH_UNSET.toLong()
@@ -151,8 +152,8 @@ class WebSocketDataSource(
 
     class Factory(
         private val http: OkHttpClient,
-        private val headers: Map<String, String>,
+        private val authorization: MediaAuthorization,
     ) : DataSource.Factory {
-        override fun createDataSource(): DataSource = WebSocketDataSource(http, headers)
+        override fun createDataSource(): DataSource = WebSocketDataSource(http, authorization)
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -19,7 +20,6 @@ import it.federicoraponi.watchdeck.ui.CameraViewModel
 import it.federicoraponi.watchdeck.ui.LiveState
 import it.federicoraponi.watchdeck.ui.LiveTransport
 import it.federicoraponi.watchdeck.ui.PlaybackState
-import it.federicoraponi.watchdeck.ui.VideoFailure
 import it.federicoraponi.watchdeck.ui.VideoMode
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
 
@@ -30,6 +30,9 @@ internal data class VideoContent(
     val player: Player?,
     val playback: PlaybackState?,
     val onRetryRecording: () -> Unit,
+    /** The moment on screen, in recordings, and its still picture for when the video does not play. */
+    val recordingTime: Long = 0,
+    val loadStill: suspend (Long) -> ByteArray? = { null },
     /** Jumps back or forward by that many seconds. */
     val onSkipRecording: (Int) -> Unit,
     val onMeasures: (LiveMeasures) -> Unit,
@@ -49,10 +52,10 @@ internal fun Video(
         } else {
             content.playback is PlaybackState.Ready
         }
-    ZoomableVideo(resetKey = state.mode to state.selectedStream, enabled = zoomable) { picture ->
+    ZoomableVideo(resetKey = state.mode to state.liveStream, enabled = zoomable) { picture ->
         when (state.mode) {
             VideoMode.Live -> {
-                val stream = state.selectedStream
+                val stream = state.liveStream
                 val live = state.live
                 val httpsStream = state.httpsStream
                 if (httpsStream != null && live !is LiveState.Failed) {
@@ -61,7 +64,7 @@ internal fun Video(
                         connectionKey = stream to state.liveAttempt,
                         muted = content.muted,
                         onPlaying = viewModel::livePlaying,
-                        onFailed = { viewModel.liveFailed(VideoFailure(detail = it)) },
+                        onFailed = viewModel::liveFailed,
                         onMeasures = content.onMeasures,
                         modifier = picture,
                     )
@@ -82,6 +85,10 @@ internal fun Video(
                         onMeasures = content.onMeasures,
                         modifier = Modifier.fillMaxSize(),
                     )
+                } else if (live !is LiveState.Failed && state.transport == LiveTransport.Snapshots) {
+                    // There is no sound in pictures.
+                    LaunchedEffect(state.liveAttempt) { content.onMeasures(LiveMeasures(hasAudio = false)) }
+                    SnapshotVideo(state.liveAttempt, viewModel::liveSnapshot, picture)
                 }
                 when (live) {
                     LiveState.Connecting -> ContainedLoadingIndicator()
@@ -101,6 +108,7 @@ internal fun Video(
                     is PlaybackState.Gap -> RecordingGap(playback, content.onSkipRecording)
                     is PlaybackState.Failed ->
                         Failure(playback.failure, R.string.video_failed, content.onRetryRecording, state.isOffline)
+                    is PlaybackState.Stills -> RecordingStill(content.recordingTime, content.loadStill, picture)
                     PlaybackState.Loading, null -> ContainedLoadingIndicator()
                 }
         }

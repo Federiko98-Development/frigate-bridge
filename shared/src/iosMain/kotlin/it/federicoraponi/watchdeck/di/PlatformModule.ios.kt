@@ -1,6 +1,8 @@
 package it.federicoraponi.watchdeck.di
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import it.federicoraponi.watchdeck.auth.IosSignInBrowser
+import it.federicoraponi.watchdeck.auth.SignInBrowser
 import it.federicoraponi.watchdeck.network.AssumedOnlineNetworkMonitor
 import it.federicoraponi.watchdeck.network.NetworkMonitor
 import it.federicoraponi.watchdeck.server.HttpClientFactory
@@ -17,6 +19,7 @@ internal actual val platformModule: Module =
         single<HttpClientFactory> { IosHttpClientFactory() }
         single<NetworkMonitor> { AssumedOnlineNetworkMonitor() }
         single<SecretStore> { MemorySecretStore() }
+        single<SignInBrowser> { IosSignInBrowser() }
         single {
             PreferenceDataStoreFactory.createWithPath {
                 "${NSHomeDirectory()}/Documents/servers.preferences_pb".toPath()

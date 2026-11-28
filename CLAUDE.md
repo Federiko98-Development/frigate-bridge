@@ -92,6 +92,33 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
   was on in `AppSettings.liveOnlyRestore`.
 - `POST /api/restart` stops the process: in Docker the container comes back only with a restart policy.
 
+## Sign-in through an external provider (verified with Keycloak and oauth2-proxy in front of Frigate 0.18.3)
+
+- `ServerSignIn` says how a server's users sign in; each way is an `Authenticator` (`frigate/Authenticator.kt`) that
+  yields a bearer token. A new way is a new `ServerSignIn` kind with its authenticator, built in
+  `ServerSessionFactory`. The OpenID Connect code is in `shared/.../auth/`; platforms only provide `SignInBrowser`
+  (a Custom Tab, never a WebView) and hand the redirect to `OidcSignIn.handleRedirect`.
+- oauth2-proxy with `--skip-jwt-bearer-tokens` accepts a JWT whose audience is its own client id. A request it does
+  not accept gets 403 with its HTML sign-in page, or a 302 to the provider with `--skip-provider-button`. Frigate's
+  own 403 is JSON and means the role does not allow it. A refused WebSocket handshake gets 403.
+- The provider may share the server's host: a sign-in redirect is recognised also by its `client_id` and
+  `response_type`. A bearer that is not a JWT is not even checked by oauth2-proxy.
+- With Frigate's authentication off and `proxy.header_map`, `/api/profile` answers the proxy's user and mapped role.
+- Access tokens may live a minute or so: never give a player a fixed header. Players take a `MediaAuthorization` and
+  sign each request (`video/MediaRequests.kt`). Refresh tokens may rotate: one authenticator per session, and a
+  renewed token is saved at once.
+- Tokens go only to the addresses they were obtained for (`keepsSignIn`); providers must use HTTPS (HTTP only on the
+  phone itself, to try a setup).
+
+## Video fallbacks
+
+- Live: HTTPS (MSE), WebRTC, another stream over HTTPS if the trouble may be the stream's, then `latest.jpg` about
+  once a second (`ui/LiveFallback.kt`). Every setback is kept with its reason (`VideoProblem`) and shown. Failures
+  that would repeat everywhere (sign-in, unreachable server) are reported at once.
+- Recordings: a failed clip is asked for once more, then shown as stills from
+  `/api/<camera>/recordings/<time>/snapshot.jpg`. Event and export videos are retried once.
+- Anything that stops working must say why on screen.
+
 ## Android platform notes
 
 - Keep `androidx.navigationevent` at 1.2.0 or later: with 1.1.2 the app crashed when the back gesture was made
@@ -147,6 +174,9 @@ Every screen, forms included, uses Material 3 Expressive. A themed classic Mater
 - Digital zoom (`ZoomableVideo`) scales only the picture, on texture views: HTTPS live view and recordings. The WebRTC
   `SurfaceViewRenderer` is left out. Photos stay whole while zoomed.
 - Photos are taken from the video on screen (`ui/capture/`), at the stream's resolution.
+- Holding a camera card opens its quick actions (live, recordings, the switches for administrators, hiding it from
+  the group); live view only is shared with the camera page (`ui/LiveOnly.kt`).
+- Settings fits one screen: the server's pages as tiles, preferences as rows that open sheets.
 - Camera groups are chosen with `CameraGroupBar`: tap selects, holding opens the group's cameras. No extra button.
   In full screen the timeline sits in a bottom sheet that can be pulled down to its handle.
 - The timeline holds on to the starts of recordings and moments. Left in a pause, the video stops and says so;
@@ -197,6 +227,7 @@ which is where SKIE runs, does need it):
   `SharedViewModelStore` and calls `clear()` on destruction; `startSharedKoin()` at launch.
 - Linking the framework and SKIE have not been tried yet: verify them first.
 - Not implemented on iOS yet: Keychain storage (`MemorySecretStore` loses passwords when the app closes),
-  accepting a self-signed certificate, following the network (`NWPathMonitor`), and the local network usage description in `Info.plist`.
+  accepting a self-signed certificate, the browser for the external sign-in (`IosSignInBrowser` opens none:
+  it needs `ASWebAuthenticationSession`), following the network (`NWPathMonitor`), and the local network usage description in `Info.plist`.
 - The Xcode build phase does not read shell profiles: set `JAVA_HOME` in the "Compile Kotlin Framework" script.
 - The wizard's Xcode project has deployment target 18.2 (the target is iOS 17).

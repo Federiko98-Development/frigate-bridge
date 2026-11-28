@@ -54,5 +54,5 @@ private const val EXPORT_CHECKS = 90
 internal fun FrigateError.toVideoFailure() =
     VideoFailure(
         problem = toProblem().takeUnless { it == ConnectionProblem.UnexpectedResponse },
-        detail = (this as? FrigateError.UnexpectedResponse)?.detail,
+        detail = (this as? FrigateError.UnexpectedResponse)?.detail ?: signInDetail(),
     )

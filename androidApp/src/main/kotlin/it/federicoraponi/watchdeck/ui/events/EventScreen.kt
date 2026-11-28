@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
@@ -63,9 +64,11 @@ import it.federicoraponi.watchdeck.ui.camera.ZoomableVideo
 import it.federicoraponi.watchdeck.ui.camera.rememberRecordingPlayer
 import it.federicoraponi.watchdeck.ui.camera.seekBy
 import it.federicoraponi.watchdeck.ui.capture.LocalFrameCapture
-import it.federicoraponi.watchdeck.ui.capture.PhotoButton
+import it.federicoraponi.watchdeck.ui.capture.TakePhotoButton
 import it.federicoraponi.watchdeck.ui.capture.rememberCaptures
+import it.federicoraponi.watchdeck.ui.designsystem.ActionRow
 import it.federicoraponi.watchdeck.ui.designsystem.BackButton
+import it.federicoraponi.watchdeck.ui.designsystem.ControlGroup
 import it.federicoraponi.watchdeck.ui.designsystem.KeepScreenOn
 import it.federicoraponi.watchdeck.ui.designsystem.NoticeCard
 import it.federicoraponi.watchdeck.ui.designsystem.PrimaryButton
@@ -74,7 +77,8 @@ import it.federicoraponi.watchdeck.ui.designsystem.Spacing
 import it.federicoraponi.watchdeck.ui.designsystem.StatusText
 import it.federicoraponi.watchdeck.ui.designsystem.Symbols
 import it.federicoraponi.watchdeck.ui.designsystem.failureText
-import it.federicoraponi.watchdeck.ui.recordings.ExportSection
+import it.federicoraponi.watchdeck.ui.recordings.ExportButton
+import it.federicoraponi.watchdeck.ui.recordings.ExportStatus
 import it.federicoraponi.watchdeck.ui.recordings.clockTime
 import it.federicoraponi.watchdeck.ui.recordings.dayAndTime
 import it.federicoraponi.watchdeck.ui.recordings.dayLabel
@@ -201,18 +205,24 @@ private fun EventScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             VideoFrame(video)
-            VideoSeekBar(player)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                SkipButton(-SKIP_SECONDS) { player?.seekBy(-SKIP_SECONDS) }
-                PlayButton(player)
-                SkipButton(SKIP_SECONDS) { player?.seekBy(SKIP_SECONDS) }
-                onPhoto?.let { PhotoButton(it) }
+            ControlGroup {
+                VideoSeekBar(player)
+                // Spaced as the transport of the recordings.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkipButton(-SKIP_SECONDS) { player?.seekBy(-SKIP_SECONDS) }
+                    PlayButton(player)
+                    SkipButton(SKIP_SECONDS) { player?.seekBy(SKIP_SECONDS) }
+                }
             }
-            FullscreenButton(onFullscreen)
+            // Full screen is always there, so the row is never empty.
+            ActionRow {
+                onPhoto?.let { TakePhotoButton(it) }
+                FullscreenButton(onFullscreen)
+            }
             state.item?.let { item ->
                 Details(item)
                 PrimaryButton(
@@ -220,19 +230,33 @@ private fun EventScreen(
                     onClick = { onOpenTimeline(item) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                state.keeping?.let { keeping ->
-                    val seen = item.labels.map { labelName(it) }.joinToString()
-                    val moment = "${dayLabel(dayOf(item.start))} ${clockTime(item.start)}"
-                    // The name the kept video gets, also in Frigate's web interface.
-                    val title = listOf(seen, state.cameraName, moment).filter { it.isNotEmpty() }.joinToString(" · ")
-                    KeepSection(keeping, onKeep = { onKeep(title) }, onOpenKept = onOpenKept)
+                // Keeping and exporting share a row while they wait to be asked; what they are doing goes underneath.
+                val keeping = state.keeping
+                val canKeep = keeping == Keeping.NotKept || keeping == Keeping.Kept
+                val canExport = state.export == ExportState.None
+                val seen = item.labels.map { labelName(it) }.joinToString()
+                val moment = "${dayLabel(dayOf(item.start))} ${clockTime(item.start)}"
+                // The name the kept video gets, also in Frigate's web interface.
+                val title = listOf(seen, state.cameraName, moment).filter { it.isNotEmpty() }.joinToString(" · ")
+                val keep = { onKeep(title) }
+                if (canKeep || canExport) {
+                    ActionRow {
+                        when (keeping) {
+                            Keeping.NotKept -> KeepButton(R.string.keep_event, keep)
+                            Keeping.Kept -> KeepButton(R.string.keep_open, onOpenKept)
+                            else -> Unit
+                        }
+                        if (canExport) ExportButton(onChoose = onExport)
+                    }
                 }
-                ExportSection(state.export, onChoose = onExport, onDone = onExportDone)
-                if (state.export == ExportState.None) {
+                keeping?.let { KeepStatus(it, onRetry = keep) }
+                ExportStatus(state.export, onDone = onExportDone)
+                if (canExport) {
                     Text(
                         stringResource(R.string.export_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
@@ -256,30 +280,29 @@ private fun EventVideo(
             is PlaybackState.Failed ->
                 Failure(playback.failure, R.string.video_failed, onRetry, state.isOffline)
             // A moment's video is always asked for whole: it has no cursor to leave in a pause.
-            PlaybackState.Loading, PlaybackState.Empty, is PlaybackState.Gap -> ContainedLoadingIndicator()
+            PlaybackState.Loading, PlaybackState.Empty, is PlaybackState.Gap, is PlaybackState.Stills ->
+                ContainedLoadingIndicator()
         }
     }
 }
 
-/** The button that keeps a moment on the server, then how it went. */
+/** How keeping a moment on the server is going, across the page. Nothing while its button stands for it. */
 @Composable
-private fun KeepSection(
+private fun KeepStatus(
     keeping: Keeping,
-    onKeep: () -> Unit,
-    onOpenKept: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     when (keeping) {
-        Keeping.NotKept -> KeepButton(R.string.keep_event, onKeep)
+        Keeping.NotKept, Keeping.Kept -> Unit
         Keeping.Working -> {
             StatusText(stringResource(R.string.keep_working))
             LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
-        Keeping.Kept -> KeepButton(R.string.keep_open, onOpenKept)
         is Keeping.Failed ->
             NoticeCard(
                 message = failureText(keeping.failure, R.string.keep_failed),
                 actionLabel = stringResource(R.string.retry),
-                onAction = onKeep,
+                onAction = onRetry,
                 announce = true,
             )
     }

@@ -16,16 +16,16 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.http.content.TextContent
 import io.ktor.http.contentLength
+import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import io.ktor.http.setCookie
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -36,22 +36,14 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-data class Credentials(
-    val username: String,
-    val password: String,
-)
-
-/** Where the session token of one server is kept. */
-interface TokenStore {
-    suspend fun read(): String?
-
-    suspend fun write(token: String?)
-}
-
 private const val MAX_ERROR_LENGTH = 200
 private const val PREVIEW_QUALITY = 60
 private const val DOWNLOAD_BUFFER = 64 * 1024
 private const val API_ROOT = "api/"
+private val REDIRECTS = setOf(301, 302, 303, 307, 308)
+
+// Where oauth2-proxy and the proxies like it serve their sign-in.
+private const val PROXY_PATH = "/oauth2/"
 
 // What the app changes and reads back at once: the proxy's cache would answer with the old state.
 private val UNCACHED = setOf("config", "users", "review")
@@ -69,19 +61,25 @@ internal val frigateJson =
 /**
  * Client for one Frigate server reached at one address. It is the only code that knows Frigate's endpoints.
  *
- * Frigate returns the login token in a cookie and does not renew tokens sent as `Authorization: Bearer`,
- * so a 401 triggers a new login with the stored credentials, once for all the requests waiting on it.
+ * Every request carries the token of the [Authenticator]. A refusal, by Frigate or by a proxy in front of it,
+ * asks it for another token, once.
+ *
+ * Frigate returns its login token in a cookie and does not renew tokens sent as `Authorization: Bearer`.
  */
 class FrigateApi(
     private val http: HttpClient,
     private val baseUrl: String,
-    private val credentials: suspend () -> Credentials?,
-    private val tokens: TokenStore,
+    private val authenticator: Authenticator,
 ) {
-    private val loginMutex = Mutex()
+    /** For a server that signs users in with Frigate's own login. */
+    constructor(
+        http: HttpClient,
+        baseUrl: String,
+        credentials: suspend () -> Credentials?,
+        tokens: TokenStore,
+    ) : this(http, baseUrl, PasswordAuthenticator(credentials, tokens))
 
-    // Set after the server refuses the credentials, so that they are not sent again and again.
-    private var loginFailure: FrigateError? = null
+    private val passwordLogin = PasswordLogin(::login)
 
     /** Also the cheapest way to check address, certificate and login: Frigate protects this endpoint too. */
     suspend fun version(): String = get("version").trim().trim('"')
@@ -229,6 +227,13 @@ class FrigateApi(
         height: Int,
     ): ByteArray = bytes("api/${camera.encodeURLPathPart()}/latest.jpg?height=$height&quality=$PREVIEW_QUALITY")
 
+    /** The recorded picture of [camera] at [time], in seconds since the epoch, as a JPEG [height] pixels high. */
+    suspend fun recordingStill(
+        camera: String,
+        time: Long,
+        height: Int,
+    ): ByteArray = bytes("api/${camera.encodeURLPathPart()}/recordings/$time/snapshot.jpg?height=$height")
+
     private suspend fun bytes(path: String): ByteArray {
         val response = authorized(HttpMethod.Get, path, root = "")
         return transport { response.readRawBytes() }
@@ -340,19 +345,20 @@ class FrigateApi(
         serverPath: String,
         receive: suspend (bytes: ByteArray, count: Int) -> Unit,
     ) {
-        val usedToken = tokens.read()
-        if (stream(serverPath, usedToken, receive)) return
+        val usedToken = authenticator.token()
+        if (stream(serverPath, usedToken, receive) == null) return
         // Refused before anything was received: once more with a new token.
-        val freshToken = renewToken(staleToken = usedToken)
-        if (!stream(serverPath, freshToken, receive)) throw FrigateError.LoginRejected()
+        val freshToken = authenticator.renew(usedToken, passwordLogin)
+        val refusal = stream(serverPath, freshToken, receive) ?: return
+        throw stillRefused(refusal)
     }
 
-    /** `false` when the token was refused. */
+    /** The status of a refused token, or `null` once the whole file has been received. */
     private suspend fun stream(
         serverPath: String,
         token: String?,
         receive: suspend (bytes: ByteArray, count: Int) -> Unit,
-    ): Boolean {
+    ): HttpStatusCode? {
         // A failure of the receiver, such as a full disk, says nothing about the server.
         var receiving: Throwable? = null
         return try {
@@ -362,7 +368,7 @@ class FrigateApi(
                     // As long as it takes: only a silence of the server ends it.
                     timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
                 }.execute { response ->
-                    if (response.status == HttpStatusCode.Unauthorized) return@execute false
+                    if (isSignInRefusal(response)) return@execute response.status
                     if (!response.status.isSuccess()) {
                         throw FrigateError.UnexpectedResponse("HTTP ${response.status.value} on the file")
                     }
@@ -384,7 +390,7 @@ class FrigateApi(
                     // A connection that drops early must not pass for the end of the file.
                     val expected = response.contentLength()
                     if (expected != null && received < expected) throw FrigateError.Unreachable()
-                    true
+                    null
                 }
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -423,16 +429,21 @@ class FrigateApi(
     fun mp4StreamUrl(stream: String): String =
         "${baseUrl.trimEnd('/')}/live/mse/api/ws?src=${stream.encodeURLParameter()}"
 
-    /** Headers for a player that downloads media by itself. Logs in again first if the token has expired. */
+    /** Headers for a player that downloads media by itself. Signs in again first if the token has expired. */
     suspend fun authorizationHeaders(): Map<String, String> {
         version()
-        return tokens.read()?.let { mapOf(HttpHeaders.Authorization to "Bearer $it") }.orEmpty()
+        return currentHeaders()
     }
 
+    /**
+     * The headers to send right now, without asking Frigate: a token about to end is replaced first, where the
+     * authenticator can tell. Players ask before each request, as a video outlasts a short-lived token.
+     */
+    suspend fun currentHeaders(): Map<String, String> =
+        authenticator.token()?.let { mapOf(HttpHeaders.Authorization to "Bearer $it") }.orEmpty()
+
     /** Allows a new login attempt after a failed one. Call it when the user asks to retry. */
-    suspend fun resetLoginFailure() {
-        loginMutex.withLock { loginFailure = null }
-    }
+    suspend fun resetLoginFailure() = authenticator.reset()
 
     private suspend fun get(path: String): String = call(HttpMethod.Get, path)
 
@@ -456,17 +467,21 @@ class FrigateApi(
         root: String = API_ROOT,
         isAnswer: (status: HttpStatusCode, body: String) -> Boolean = { _, _ -> false },
     ): HttpResponse {
-        val usedToken = tokens.read()
+        val usedToken = authenticator.token()
         var response = send(method, path, usedToken, jsonBody, root)
-        if (response.status == HttpStatusCode.Unauthorized) {
-            val refusal = transport { response.bodyAsText() }
-            if (isAnswer(response.status, refusal)) throw refused(response.status, "/$root$path", refusal)
-            val freshToken = renewToken(staleToken = usedToken)
-            response = send(method, path, freshToken, jsonBody, root)
+        if (isSignInRefusal(response)) {
             if (response.status == HttpStatusCode.Unauthorized) {
-                val again = transport { response.bodyAsText() }
-                if (isAnswer(response.status, again)) throw refused(response.status, "/$root$path", again)
-                throw FrigateError.LoginRejected()
+                val refusal = transport { response.bodyAsText() }
+                if (isAnswer(response.status, refusal)) throw refused(response.status, "/$root$path", refusal)
+            }
+            val freshToken = authenticator.renew(usedToken, passwordLogin)
+            response = send(method, path, freshToken, jsonBody, root)
+            if (isSignInRefusal(response)) {
+                if (response.status == HttpStatusCode.Unauthorized) {
+                    val again = transport { response.bodyAsText() }
+                    if (isAnswer(response.status, again)) throw refused(response.status, "/$root$path", again)
+                }
+                throw stillRefused(response.status)
             }
         }
         if (!response.status.isSuccess()) {
@@ -474,6 +489,50 @@ class FrigateApi(
         }
         return response
     }
+
+    /**
+     * Whether [response] refuses who is asking, so that another token is worth a try. Frigate answers 401. A proxy
+     * that signs users in answers 401 too, sends to its login page, or answers 403 with a page of its own; a 403 of
+     * Frigate is JSON and means the user's role does not allow it.
+     *
+     * A server set up for Frigate's login that sends to a login page has something else in front of it, which no
+     * password can open: that is reported at once.
+     */
+    private suspend fun isSignInRefusal(response: HttpResponse): Boolean {
+        val loginPage = externalLoginPage(response)
+        if (loginPage != null) {
+            if (!authenticator.isExternal) throw FrigateError.ExternalSignIn(loginPage)
+            return true
+        }
+        if (response.status == HttpStatusCode.Unauthorized) return true
+        val isProxyPage =
+            response.status == HttpStatusCode.Forbidden &&
+                response.contentType()?.match(ContentType.Text.Html) == true
+        if (!isProxyPage) return false
+        if (authenticator.isExternal) return true
+        // oauth2-proxy may show its sign-in page instead of redirecting to the provider.
+        if (PROXY_PATH in transport { response.bodyAsText() }) throw FrigateError.ExternalSignIn("")
+        return false
+    }
+
+    // A redirect to another host, to the proxy's own sign-in path, or to any provider's authorization page, which
+    // may share the server's host.
+    private fun externalLoginPage(response: HttpResponse): String? {
+        if (response.status.value !in REDIRECTS) return null
+        val location = response.headers[HttpHeaders.Location] ?: return null
+        val isAbsolute = location.startsWith("http://") || location.startsWith("https://")
+        val leaves = isAbsolute && Url(location).host != Url(baseUrl).host
+        val query = location.substringAfter('?', "")
+        val asksToAuthorize = "client_id=" in query && "response_type=" in query
+        return location.takeIf { leaves || asksToAuthorize || PROXY_PATH in location.substringBefore('?') }
+    }
+
+    private fun stillRefused(status: HttpStatusCode): FrigateError =
+        if (authenticator.isExternal) {
+            FrigateError.SignInRefused(status.value)
+        } else {
+            FrigateError.LoginRejected()
+        }
 
     private fun refused(
         status: HttpStatusCode,
@@ -504,30 +563,16 @@ class FrigateApi(
         return (json?.get(name) as? JsonPrimitive)?.takeIf { it.isString }?.content
     }
 
-    private suspend fun renewToken(staleToken: String?): String? =
-        loginMutex.withLock {
-            val current = tokens.read()
-            // Another request already logged in while this one was waiting.
-            if (current != null && current != staleToken) return@withLock current
-            loginFailure?.let { throw it }
-            try {
-                login().also { tokens.write(it) }
-            } catch (error: FrigateError) {
-                if (error is FrigateError.LoginRejected || error is FrigateError.RateLimited) loginFailure = error
-                throw error
-            }
-        }
-
     /** Returns the new token, or `null` if the server has authentication turned off. */
-    private suspend fun login(): String? {
-        val stored = credentials()
-        if (stored == null || stored.username.isBlank()) throw FrigateError.LoginRequired()
+    private suspend fun login(stored: Credentials): String? {
         val body =
             buildJsonObject {
                 put("user", stored.username)
                 put("password", stored.password)
             }
         val response = send(HttpMethod.Post, "login", token = null, jsonBody = body.toString())
+        // Throws if a proxy answers in Frigate's place.
+        if (response.status != HttpStatusCode.Unauthorized) isSignInRefusal(response)
         return when {
             response.status == HttpStatusCode.Unauthorized -> throw FrigateError.LoginRejected()
             response.status == HttpStatusCode.TooManyRequests -> throw FrigateError.RateLimited()

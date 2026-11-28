@@ -2,7 +2,9 @@ package it.federicoraponi.watchdeck.di
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import it.federicoraponi.watchdeck.auth.SignInBrowser
 import it.federicoraponi.watchdeck.network.NetworkMonitor
+import it.federicoraponi.watchdeck.server.FakeBrowser
 import it.federicoraponi.watchdeck.server.FakeNetwork
 import it.federicoraponi.watchdeck.server.FakeNetworkMonitor
 import it.federicoraponi.watchdeck.server.FakeSecretStore
@@ -42,6 +44,7 @@ class SharedModuleTest : ViewModelTest() {
                 single<HttpClientFactory> { FakeNetwork() }
                 single<NetworkMonitor> { FakeNetworkMonitor() }
                 single<SecretStore> { FakeSecretStore() }
+                single<SignInBrowser> { FakeBrowser() }
                 // ViewModels read the saved servers as soon as they are created.
                 single<ServerStore> { MemoryServerStore() }
                 single<DataStore<Preferences>> { UnusedDataStore() }

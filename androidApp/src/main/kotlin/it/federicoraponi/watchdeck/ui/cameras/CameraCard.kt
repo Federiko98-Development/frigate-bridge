@@ -2,6 +2,7 @@ package it.federicoraponi.watchdeck.ui.cameras
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -19,11 +20,15 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,16 +52,35 @@ fun CameraCard(
     previews: CameraPreviews,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Offers the quick actions. */
+    onHold: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.large
+    val holdLabel = stringResource(R.string.quick_actions)
+    val haptics = LocalHapticFeedback.current
     Surface(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth().aspectRatio(16f / 9f).semantics(mergeDescendants = true) {},
-        shape = MaterialTheme.shapes.large,
+        // A clickable surface keeps its clicks to itself, so holding it could not be heard.
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(shape)
+                .combinedClickable(
+                    role = Role.Button,
+                    onLongClickLabel = holdLabel,
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onHold()
+                    },
+                    onClick = onClick,
+                ).semantics(mergeDescendants = true) {},
+        shape = shape,
         color = colors.surfaceContainerHighest,
     ) {
         Box {
-            val picture = if (camera.enabled) previewPicture(camera.ref, previews) else null
+            val preview = if (camera.enabled) previewPicture(camera.ref, previews) else PreviewPicture()
+            val picture = preview.image
             if (picture != null) {
                 Image(
                     bitmap = picture,
@@ -76,6 +100,22 @@ fun CameraCard(
                         painterResource(R.drawable.symbol_videocam),
                         contentDescription = null,
                         modifier = Modifier.padding(Spacing.sm).size(20.dp),
+                    )
+                }
+            }
+            if (preview.isFailing) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopStart).padding(Spacing.sm),
+                    shape = MaterialTheme.shapes.small,
+                    color = colors.errorContainer,
+                    contentColor = colors.onErrorContainer,
+                ) {
+                    Text(
+                        stringResource(
+                            if (picture == null) R.string.preview_unavailable else R.string.preview_stale,
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs),
                     )
                 }
             }

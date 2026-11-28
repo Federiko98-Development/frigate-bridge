@@ -61,6 +61,9 @@ class EventViewModel(
     private var loadJob: Job? = null
     private var exportJob: Job? = null
     private var seeks = 0
+
+    // The video already failed once and was asked for again.
+    private var hasRetried = false
     private val mutableState = MutableStateFlow(EventState())
     val state: StateFlow<EventState> = mutableState.asStateFlow()
 
@@ -78,10 +81,19 @@ class EventViewModel(
         }
     }
 
-    fun retry() = load()
+    fun retry() {
+        hasRetried = false
+        load()
+    }
 
-    fun playerFailed(detail: String?) {
-        mutableState.update { it.copy(playback = PlaybackState.Failed(VideoFailure(detail = detail))) }
+    /** The player gave up: the video is asked for once more, which also renews an ended sign-in. */
+    fun playerFailed(failure: VideoFailure) {
+        if (!hasRetried) {
+            hasRetried = true
+            load()
+        } else {
+            mutableState.update { it.copy(playback = PlaybackState.Failed(failure)) }
+        }
     }
 
     /** Asks the server for a file with the video of this moment. */

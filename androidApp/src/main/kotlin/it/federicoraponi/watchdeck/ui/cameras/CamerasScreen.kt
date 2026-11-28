@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.federicoraponi.watchdeck.R
 import it.federicoraponi.watchdeck.camera.Camera
+import it.federicoraponi.watchdeck.camera.CameraFeature
 import it.federicoraponi.watchdeck.camera.CameraRef
 import it.federicoraponi.watchdeck.frigate.MINIMUM_FRIGATE_VERSION
 import it.federicoraponi.watchdeck.settings.HomeLayout
@@ -59,6 +60,7 @@ import it.federicoraponi.watchdeck.ui.designsystem.RefreshableContent
 import it.federicoraponi.watchdeck.ui.designsystem.ServerBadge
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
 import it.federicoraponi.watchdeck.ui.designsystem.Symbols
+import it.federicoraponi.watchdeck.ui.designsystem.problemText
 import it.federicoraponi.watchdeck.ui.designsystem.unavailableText
 import it.federicoraponi.watchdeck.ui.rememberAllowLocalNetwork
 import it.federicoraponi.watchdeck.ui.rememberLocalNetworkAccess
@@ -76,6 +78,14 @@ data class CamerasActions(
     val openCamera: (CameraRef) -> Unit = {},
     val previews: CameraPreviews = CameraPreviews.None,
     val toggleLayout: () -> Unit = {},
+    val openRecordings: (CameraRef) -> Unit = {},
+    val hold: (CameraRef) -> Unit = {},
+    val release: () -> Unit = {},
+    val setFeature: (CameraFeature, Boolean) -> Unit = { _, _ -> },
+    val setLiveOnly: (Boolean) -> Unit = {},
+    val hideHeld: () -> Unit = {},
+    val signIn: () -> Unit = {},
+    val cancelSignIn: () -> Unit = {},
 )
 
 @Composable
@@ -84,6 +94,7 @@ fun CamerasRoute(
     onNoServer: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenCamera: (CameraRef) -> Unit,
+    onOpenRecordings: (CameraRef) -> Unit,
     bottomBar: @Composable () -> Unit = {},
     viewModel: CamerasViewModel = koinViewModel(),
 ) {
@@ -121,6 +132,14 @@ fun CamerasRoute(
                         refreshKey = Triple(settings.previewRefresh, settings.savePreviewData, state.reloads),
                     ),
                 toggleLayout = viewModel::toggleLayout,
+                openRecordings = onOpenRecordings,
+                hold = viewModel::hold,
+                release = viewModel::release,
+                setFeature = viewModel::setFeature,
+                setLiveOnly = viewModel::setLiveOnly,
+                hideHeld = viewModel::hideHeld,
+                signIn = viewModel::signIn,
+                cancelSignIn = viewModel::cancelSignIn,
             ),
     )
 }
@@ -165,26 +184,71 @@ fun CamerasScreen(
             RefreshableContent(isRefreshing = state.isRefreshing, onRefresh = actions.retry) {
                 when (val content = state.content) {
                     CamerasContent.Loading, CamerasContent.NoServer -> LoadingContent()
-                    is CamerasContent.Failed ->
-                        MessageState(
-                            icon = Symbols.Warning,
-                            title = unavailableText(content.problem, state.isOffline),
-                            message = if (state.isOffline) stringResource(R.string.offline_message) else null,
-                            isError = true,
-                        ) {
-                            PrimaryButton(text = stringResource(R.string.retry), onClick = actions.retry)
-                            TextButton(
-                                onClick = { state.server?.let { actions.editServer(it.id) } },
-                                shapes = ButtonDefaults.shapes(),
-                            ) { Text(stringResource(R.string.server_edit)) }
-                        }
+                    is CamerasContent.Failed -> UnavailableServer(content, state, actions)
                     is CamerasContent.Ready ->
-                        CameraGrid(content, state.settings.homeLayout, actions.openCamera, actions.previews)
+                        CameraGrid(content, state.settings.homeLayout, actions)
                 }
             }
         }
     }
+    state.quick?.let { quick ->
+        // The panel closes before another page opens, so that coming back does not find it there.
+        val leaving: (() -> Unit) -> Unit = { open ->
+            actions.release()
+            open()
+        }
+        QuickActionsSheet(
+            quick = quick,
+            onDismiss = actions.release,
+            onOpenLive = { leaving { actions.openCamera(quick.camera.ref) } },
+            onOpenRecordings = { leaving { actions.openRecordings(quick.camera.ref) } },
+            onFeature = actions.setFeature,
+            onLiveOnly = actions.setLiveOnly,
+            onHide = actions.hideHeld,
+        )
+    }
 }
+
+/** Why the cameras cannot be shown, with the way on: signing in again where that is what is missing. */
+@Composable
+private fun UnavailableServer(
+    content: CamerasContent.Failed,
+    state: CamerasState,
+    actions: CamerasActions,
+) {
+    val needsSignIn = state.signsInExternally && content.problem in SIGN_IN_PROBLEMS && !state.isOffline
+    val failure = state.signInFailure
+    val explanation =
+        when {
+            state.isOffline -> stringResource(R.string.offline_message)
+            state.isWaitingForBrowser -> stringResource(R.string.sign_in_waiting)
+            failure != null -> listOfNotNull(problemText(failure.problem), failure.detail).joinToString("\n")
+            else -> content.detail
+        }
+    MessageState(
+        icon = Symbols.Warning,
+        title = unavailableText(content.problem, state.isOffline),
+        message = explanation,
+        isError = true,
+    ) {
+        if (state.isWaitingForBrowser) {
+            PrimaryButton(text = stringResource(R.string.cancel), onClick = actions.cancelSignIn)
+        } else if (needsSignIn) {
+            PrimaryButton(text = stringResource(R.string.sign_in), onClick = actions.signIn)
+            TextButton(onClick = actions.retry, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(R.string.retry))
+            }
+        } else {
+            PrimaryButton(text = stringResource(R.string.retry), onClick = actions.retry)
+        }
+        TextButton(
+            onClick = { state.server?.let { actions.editServer(it.id) } },
+            shapes = ButtonDefaults.shapes(),
+        ) { Text(stringResource(R.string.server_edit)) }
+    }
+}
+
+private val SIGN_IN_PROBLEMS = setOf(ConnectionProblem.SignInRequired, ConnectionProblem.SignInRefused)
 
 /** Switches between the grid and one camera below the other. The icon shows what a tap gives. */
 @Composable
@@ -271,8 +335,7 @@ internal fun ServerSwitcher(
 private fun CameraGrid(
     content: CamerasContent.Ready,
     layout: HomeLayout,
-    onOpen: (CameraRef) -> Unit,
-    previews: CameraPreviews,
+    actions: CamerasActions,
 ) {
     if (content.cameras.isEmpty()) {
         MessageState(icon = Symbols.Home, title = stringResource(R.string.cameras_empty))
@@ -290,7 +353,13 @@ private fun CameraGrid(
             }
         }
         items(content.cameras, key = { it.ref.cameraName }) { camera ->
-            CameraCard(camera, previews, onClick = { onOpen(camera.ref) }, modifier = Modifier.animateItem())
+            CameraCard(
+                camera,
+                actions.previews,
+                onClick = { actions.openCamera(camera.ref) },
+                onHold = { actions.hold(camera.ref) },
+                modifier = Modifier.animateItem(),
+            )
         }
     }
 }

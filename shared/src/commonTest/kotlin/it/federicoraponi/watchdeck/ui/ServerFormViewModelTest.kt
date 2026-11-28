@@ -12,7 +12,7 @@ class ServerFormViewModelTest : ViewModelTest() {
     private val fixture = Fixture()
 
     private fun form(serverId: String? = null) =
-        ServerFormViewModel(ServerFormArgs(serverId), fixture.registry, fixture.sessions)
+        ServerFormViewModel(ServerFormArgs(serverId), fixture.registry, fixture.sessions, fixture.signIn)
 
     private fun ServerFormViewModel.fillHome(password: String = fixture.home.password) {
         setName("Home")
@@ -55,8 +55,31 @@ class ServerFormViewModelTest : ViewModelTest() {
 
             viewModel.save()
 
-            assertEquals(FormError.entries.toSet(), viewModel.outcome().errors)
+            val expected =
+                setOf(
+                    FormError.NameMissing,
+                    FormError.UrlInvalid,
+                    FormError.AlternativeUrlInvalid,
+                    FormError.PasswordMissing,
+                )
+            assertEquals(expected, viewModel.outcome().errors)
             assertTrue(savedServers().isEmpty())
+        }
+
+    @Test
+    fun asksForAProviderOverHttpsForTheExternalSignIn() =
+        runTest {
+            val viewModel = form()
+            viewModel.setName("Lab")
+            viewModel.setUrl("https://home.example.com")
+            viewModel.setExternal(true)
+            viewModel.setIssuer("http://id.example.com/realms/demo")
+            viewModel.setClientId("")
+
+            viewModel.save()
+
+            assertEquals(setOf(FormError.IssuerInvalid, FormError.ClientIdMissing), viewModel.outcome().errors)
+            assertTrue(fixture.browser.opened.isEmpty())
         }
 
     @Test

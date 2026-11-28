@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import it.federicoraponi.watchdeck.R
 import it.federicoraponi.watchdeck.server.ExportedFile
 import it.federicoraponi.watchdeck.ui.ExportState
+import it.federicoraponi.watchdeck.ui.designsystem.ActionRow
 import it.federicoraponi.watchdeck.ui.designsystem.NoticeCard
 import it.federicoraponi.watchdeck.ui.designsystem.PrimaryButton
 import it.federicoraponi.watchdeck.ui.designsystem.Spacing
@@ -21,19 +22,23 @@ import it.federicoraponi.watchdeck.ui.designsystem.StatusText
 import it.federicoraponi.watchdeck.ui.designsystem.Symbols
 import it.federicoraponi.watchdeck.ui.designsystem.failureText
 
-/** The button that starts an export, then its progress and its outcome. */
+/** The button that starts an export. It sits in a row with the other actions, and only while there is no export. */
 @Composable
-fun ExportSection(
+fun ExportButton(onChoose: () -> Unit) {
+    FilledTonalButton(onClick = onChoose, shapes = ButtonDefaults.shapes()) {
+        Icon(Symbols.Share, contentDescription = null)
+        Text(stringResource(R.string.export_clip), modifier = Modifier.padding(start = Spacing.sm))
+    }
+}
+
+/** The progress of an export and its outcome, across the page under the row of actions. Nothing before it starts. */
+@Composable
+fun ExportStatus(
     export: ExportState,
-    onChoose: () -> Unit,
     onDone: () -> Unit,
 ) {
     when (export) {
-        ExportState.None ->
-            FilledTonalButton(onClick = onChoose, shapes = ButtonDefaults.shapes()) {
-                Icon(Symbols.Share, contentDescription = null)
-                Text(stringResource(R.string.export_clip), modifier = Modifier.padding(start = Spacing.sm))
-            }
+        ExportState.None -> Unit
         ExportState.Working -> {
             StatusText(stringResource(R.string.export_working))
             LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -58,8 +63,10 @@ private fun ReadyExport(
     if (sharing.isBusy) {
         DownloadProgress(onCancel = sharing::cancel)
     } else {
-        PrimaryButton(text = stringResource(R.string.export_share), onClick = { sharing.share(file) })
-        TextButton(onClick = onDone, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.close)) }
+        ActionRow {
+            PrimaryButton(text = stringResource(R.string.export_share), onClick = { sharing.share(file) })
+            TextButton(onClick = onDone, shapes = ButtonDefaults.shapes()) { Text(stringResource(R.string.close)) }
+        }
     }
     SharingFailure(sharing.failure)
 }

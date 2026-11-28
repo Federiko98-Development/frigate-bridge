@@ -29,6 +29,8 @@ dependencies {
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.biometric)
+    // The sign-in of an external provider opens in the browser, as a Custom Tab.
+    implementation(libs.androidx.browser)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.navigation.compose)
     // 1.1.x crashes when a menu closes while the back gesture is in progress.

@@ -219,6 +219,7 @@ private fun AppNavHost(
                 onNoServer = { navController.showServers() },
                 onEditServer = { navController.open(ServerForm(it)) },
                 onOpenCamera = { navController.openCamera(it, recording = false) },
+                onOpenRecordings = { navController.openCamera(it, recording = true) },
                 bottomBar = { tabBar(MainTab.Cameras) },
             )
         }
